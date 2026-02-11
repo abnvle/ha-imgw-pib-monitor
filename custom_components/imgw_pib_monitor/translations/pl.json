@@ -1,0 +1,98 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "IMGW-PIB Monitor — Typ danych",
+        "description": "Wybierz rodzaj danych IMGW-PIB, które chcesz monitorować.",
+        "data": {
+          "data_type": "Typ danych"
+        }
+      },
+      "station": {
+        "title": "IMGW-PIB Monitor — Stacja",
+        "description": "Wybierz stację pomiarową.",
+        "data": {
+          "station_id": "Stacja"
+        }
+      },
+      "voivodeship": {
+        "title": "IMGW-PIB Monitor — Województwo",
+        "description": "Wybierz województwo dla ostrzeżeń meteorologicznych.",
+        "data": {
+          "voivodeship": "Województwo"
+        }
+      },
+      "powiat": {
+        "title": "IMGW-PIB Monitor — Powiat",
+        "description": "Wybierz powiat lub monitoruj całe województwo.",
+        "data": {
+          "powiat": "Powiat"
+        }
+      },
+      "voivodeship_hydro": {
+        "title": "IMGW-PIB Monitor — Województwo",
+        "description": "Wybierz województwo dla ostrzeżeń hydrologicznych.",
+        "data": {
+          "voivodeship": "Województwo"
+        }
+      },
+      "interval": {
+        "title": "IMGW-PIB Monitor — Interwał aktualizacji",
+        "description": "Ustaw częstotliwość aktualizacji danych (w minutach). Minimum: 5 min, Maksimum: 120 min.",
+        "data": {
+          "update_interval": "Interwał aktualizacji (minuty)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie można połączyć się z API IMGW-PIB.",
+      "no_stations": "Brak dostępnych stacji dla tego typu danych.",
+      "unknown": "Wystąpił nieznany błąd."
+    },
+    "abort": {
+      "already_configured": "Ta stacja/region jest już skonfigurowany dla tego typu danych."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "IMGW-PIB Monitor — Ustawienia",
+        "description": "Zaktualizuj ustawienia integracji.",
+        "data": {
+          "update_interval": "Interwał aktualizacji (minuty)",
+          "station_id": "Stacja",
+          "voivodeship": "Województwo",
+          "powiat": "Powiat"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "synop_temperature": { "name": "Temperatura" },
+      "synop_wind_speed": { "name": "Prędkość wiatru" },
+      "synop_wind_direction": { "name": "Kierunek wiatru" },
+      "synop_humidity": { "name": "Wilgotność" },
+      "synop_precipitation": { "name": "Suma opadu" },
+      "synop_pressure": { "name": "Ciśnienie atmosferyczne" },
+      "hydro_water_level": { "name": "Stan wody" },
+      "hydro_flow": { "name": "Przepływ wody" },
+      "hydro_water_temperature": { "name": "Temperatura wody" },
+      "hydro_ice_phenomenon": { "name": "Zjawisko lodowe" },
+      "meteo_air_temperature": { "name": "Temperatura powietrza" },
+      "meteo_ground_temperature": { "name": "Temperatura gruntu" },
+      "meteo_wind_avg_speed": { "name": "Średnia prędkość wiatru" },
+      "meteo_wind_max_speed": { "name": "Maksymalna prędkość wiatru" },
+      "meteo_wind_gust": { "name": "Porywy wiatru (10 min)" },
+      "meteo_wind_direction": { "name": "Kierunek wiatru" },
+      "meteo_humidity": { "name": "Wilgotność" },
+      "meteo_precipitation_10min": { "name": "Opad (10 min)" },
+      "warnings_meteo_count": { "name": "Aktywne ostrzeżenia meteo" },
+      "warnings_meteo_max_level": { "name": "Najwyższy stopień ostrzeżenia" },
+      "warnings_meteo_latest": { "name": "Ostatnie ostrzeżenie meteo" },
+      "warnings_hydro_count": { "name": "Aktywne ostrzeżenia hydro" },
+      "warnings_hydro_max_level": { "name": "Najwyższy stopień ostrzeżenia hydro" },
+      "warnings_hydro_latest": { "name": "Ostatnie ostrzeżenie hydro" }
+    }
+  }
+}
