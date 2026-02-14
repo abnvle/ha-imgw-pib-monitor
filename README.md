@@ -2,6 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/abnvle/ha-imgw-pib-monitor)](https://github.com/abnvle/ha-imgw-pib-monitor/releases)
+[![Downloads](https://img.shields.io/github/downloads/abnvle/ha-imgw-pib-monitor/total)](https://github.com/abnvle/ha-imgw-pib-monitor/releases)
 [![License: MIT](https://img.shields.io/github/license/abnvle/ha-imgw-pib-monitor?v=2)](https://github.com/abnvle/ha-imgw-pib-monitor/blob/main/LICENSE)
 
 [English version](README_EN.md)
