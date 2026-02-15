@@ -408,45 +408,48 @@ async def async_setup_entry(
     is_auto = entry.data.get(CONF_AUTO_DETECT, False)
     auto_data = coordinator.data.get("auto", {})
 
+    # Helper function to add sensors only if they have data
+    def add_sensors(data_type: str, station_id: str | None, sensor_descs: tuple[ImgwSensorEntityDescription, ...]):
+        if station_id == "auto":
+            s_data = auto_data.get(data_type)
+        else:
+            s_data = coordinator.data.get(data_type, {}).get(station_id) if station_id else coordinator.data.get(data_type)
+
+        if not s_data:
+            return
+
+        for desc in sensor_descs:
+            if desc.value_fn(s_data) is not None:
+                entities.append(ImgwSensorEntity(coordinator, desc, data_type, station_id))
+
     # 1. Weather (SYNOP)
     if is_auto:
-        if auto_data.get(DATA_TYPE_SYNOP):
-            for desc in SYNOP_SENSORS:
-                entities.append(ImgwSensorEntity(coordinator, desc, DATA_TYPE_SYNOP, "auto"))
+        add_sensors(DATA_TYPE_SYNOP, "auto", SYNOP_SENSORS)
     else:
         for sid in entry.data.get(CONF_SELECTED_SYNOP, []):
-            for desc in SYNOP_SENSORS:
-                entities.append(ImgwSensorEntity(coordinator, desc, DATA_TYPE_SYNOP, sid))
+            add_sensors(DATA_TYPE_SYNOP, sid, SYNOP_SENSORS)
 
     # 2. River (HYDRO)
     if is_auto:
-        if auto_data.get(DATA_TYPE_HYDRO):
-            for desc in HYDRO_SENSORS:
-                entities.append(ImgwSensorEntity(coordinator, desc, DATA_TYPE_HYDRO, "auto"))
+        add_sensors(DATA_TYPE_HYDRO, "auto", HYDRO_SENSORS)
     else:
         for sid in entry.data.get(CONF_SELECTED_HYDRO, []):
-            for desc in HYDRO_SENSORS:
-                entities.append(ImgwSensorEntity(coordinator, desc, DATA_TYPE_HYDRO, sid))
+            add_sensors(DATA_TYPE_HYDRO, sid, HYDRO_SENSORS)
 
     # 3. Meteo (METEO)
     if is_auto:
-        if auto_data.get(DATA_TYPE_METEO):
-            for desc in METEO_SENSORS:
-                entities.append(ImgwSensorEntity(coordinator, desc, DATA_TYPE_METEO, "auto"))
+        add_sensors(DATA_TYPE_METEO, "auto", METEO_SENSORS)
     else:
         for sid in entry.data.get(CONF_SELECTED_METEO, []):
-            for desc in METEO_SENSORS:
-                entities.append(ImgwSensorEntity(coordinator, desc, DATA_TYPE_METEO, sid))
+            add_sensors(DATA_TYPE_METEO, sid, METEO_SENSORS)
 
     # 4. Warnings Meteo
     if entry.data.get(CONF_ENABLE_WARNINGS_METEO):
-        for desc in WARNINGS_METEO_SENSORS:
-            entities.append(ImgwSensorEntity(coordinator, desc, DATA_TYPE_WARNINGS_METEO))
+        add_sensors(DATA_TYPE_WARNINGS_METEO, None, WARNINGS_METEO_SENSORS)
 
     # 5. Warnings Hydro
     if entry.data.get(CONF_ENABLE_WARNINGS_HYDRO):
-        for desc in WARNINGS_HYDRO_SENSORS:
-            entities.append(ImgwSensorEntity(coordinator, desc, DATA_TYPE_WARNINGS_HYDRO))
+        add_sensors(DATA_TYPE_WARNINGS_HYDRO, None, WARNINGS_HYDRO_SENSORS)
 
     async_add_entities(entities)
 
