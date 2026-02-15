@@ -2,68 +2,64 @@
   "config": {
     "step": {
       "user": {
-        "title": "IMGW-PIB Monitor — Data Type",
-        "description": "Select the type of IMGW-PIB data you want to monitor.",
+        "title": "IMGW-PIB Monitor",
+        "description": "Select the integration setup method.",
         "data": {
-          "data_type": "Data type"
+          "setup_mode": "Setup Mode"
         }
       },
-      "station": {
-        "title": "IMGW-PIB Monitor — Station",
-        "description": "Select a measurement station.",
+      "manual_start": {
+        "title": "Manual Setup",
+        "description": "Enter the name of a station or city (e.g., Warsaw).",
+        "data": {
+          "station_name": "Location Name"
+        }
+      },
+      "select": {
+        "title": "Select Location",
+        "description": "Choose exactly one station from the results.",
         "data": {
           "station_id": "Station"
         }
       },
-      "voivodeship": {
-        "title": "IMGW-PIB Monitor — Region",
-        "description": "Select a voivodeship for meteorological warnings.",
+      "options": {
+        "title": "Sensor Configuration",
+        "description": "Choose which sensor groups to add.",
         "data": {
-          "voivodeship": "Voivodeship"
-        }
-      },
-      "powiat": {
-        "title": "IMGW-PIB Monitor — County",
-        "description": "Select a county (powiat) or monitor the entire voivodeship.",
-        "data": {
-          "powiat": "County (powiat)"
-        }
-      },
-      "voivodeship_hydro": {
-        "title": "IMGW-PIB Monitor — Region",
-        "description": "Select a voivodeship for hydrological warnings.",
-        "data": {
-          "voivodeship": "Voivodeship"
-        }
-      },
-      "interval": {
-        "title": "IMGW-PIB Monitor — Update Interval",
-        "description": "Set the data update interval (in minutes). Minimum: 5 min, Maximum: 120 min.",
-        "data": {
-          "update_interval": "Update interval (minutes)"
+          "weather": "Add weather sensors",
+          "river": "Add river sensors",
+          "warnings": "Add weather warnings"
         }
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to the IMGW-PIB API.",
-      "no_stations": "No stations available for this data type.",
-      "unknown": "Unknown error occurred."
+      "cannot_connect": "Connection error with IMGW.",
+      "no_stations": "No stations found with this name.",
+      "no_coordinates": "Home Assistant coordinates are not set. Configure your location in HA settings or use manual setup.",
+      "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "This station/region is already configured for this data type."
+      "already_configured": "Location is already configured.",
+      "no_coordinates": "Home Assistant coordinates are not set.",
+      "cannot_connect": "Connection error with IMGW.",
+      "no_stations_nearby": "No IMGW stations found within 50km of your location."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "IMGW-PIB Monitor — Settings",
-        "description": "Update the integration settings.",
+        "title": "Settings",
         "data": {
-          "update_interval": "Update interval (minutes)",
-          "station_id": "Station",
-          "voivodeship": "Voivodeship",
-          "powiat": "County (powiat)"
+          "update_interval": "Update interval (minutes)"
         }
+      }
+    }
+  },
+  "selector": {
+    "setup_mode": {
+      "options": {
+        "auto": "Automatic Setup (Use GPS location)",
+        "manual": "Manual Setup (Search by name)"
       }
     }
   },
@@ -74,25 +70,37 @@
       "synop_wind_direction": { "name": "Wind direction" },
       "synop_humidity": { "name": "Humidity" },
       "synop_precipitation": { "name": "Precipitation" },
-      "synop_pressure": { "name": "Atmospheric pressure" },
+      "synop_pressure": { "name": "Pressure" },
       "hydro_water_level": { "name": "Water level" },
-      "hydro_flow": { "name": "Water flow" },
+      "hydro_flow": { "name": "Flow" },
       "hydro_water_temperature": { "name": "Water temperature" },
       "hydro_ice_phenomenon": { "name": "Ice phenomenon" },
       "meteo_air_temperature": { "name": "Air temperature" },
       "meteo_ground_temperature": { "name": "Ground temperature" },
       "meteo_wind_avg_speed": { "name": "Average wind speed" },
       "meteo_wind_max_speed": { "name": "Maximum wind speed" },
-      "meteo_wind_gust": { "name": "Wind gust (10 min)" },
+      "meteo_wind_gust": { "name": "Wind gust" },
       "meteo_wind_direction": { "name": "Wind direction" },
       "meteo_humidity": { "name": "Humidity" },
-      "meteo_precipitation_10min": { "name": "Precipitation (10 min)" },
-      "warnings_meteo_count": { "name": "Active meteo warnings" },
-      "warnings_meteo_max_level": { "name": "Max warning level" },
-      "warnings_meteo_latest": { "name": "Latest meteo warning" },
-      "warnings_hydro_count": { "name": "Active hydro warnings" },
-      "warnings_hydro_max_level": { "name": "Max hydro warning level" },
-      "warnings_hydro_latest": { "name": "Latest hydro warning" }
+      "meteo_precipitation_10min": { "name": "Precipitation" },
+      "warnings_meteo_count": { "name": "Active weather warnings" },
+      "warnings_meteo_max_level": { "name": "Highest warning level" },
+      "warnings_meteo_latest": { "name": "Latest warning" },
+      "warnings_meteo_details": { "name": "Warning details" },
+      "warnings_hydro_count": { "name": "Active river warnings" },
+      "warnings_hydro_max_level": { "name": "Highest river warning level" },
+      "warnings_hydro_latest": { "name": "Latest river warning" },
+      "warnings_hydro_details": { "name": "River warning details" },
+      "station_id": { "name": "Station ID" },
+      "river": { "name": "River name" },
+      "distance": { "name": "Distance to station" },
+      "api_status": {
+        "name": "API Status",
+        "state": {
+          "online": "Online",
+          "offline": "Offline"
+        }
+      }
     }
   }
 }

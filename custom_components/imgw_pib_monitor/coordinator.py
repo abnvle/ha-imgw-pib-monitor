@@ -2,122 +2,258 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import logging
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import ImgwApiClient, ImgwApiConnectionError, ImgwApiError
+from .api import ImgwApiClient
 from .const import (
-    CONF_DATA_TYPE,
+    CONF_AUTO_DETECT,
+    CONF_ENABLE_WARNINGS_HYDRO,
+    CONF_ENABLE_WARNINGS_METEO,
     CONF_POWIAT,
-    CONF_STATION_ID,
+    CONF_SELECTED_HYDRO,
+    CONF_SELECTED_METEO,
+    CONF_SELECTED_SYNOP,
     CONF_VOIVODESHIP,
     DATA_TYPE_HYDRO,
     DATA_TYPE_METEO,
     DATA_TYPE_SYNOP,
     DATA_TYPE_WARNINGS_HYDRO,
     DATA_TYPE_WARNINGS_METEO,
+    DEFAULT_MAX_DISTANCE,
     DOMAIN,
+    SYNOP_STATIONS,
+    VOIVODESHIP_CAPITALS,
     VOIVODESHIPS,
 )
+from .utils import haversine
 
 _LOGGER = logging.getLogger(__name__)
 
+class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Global coordinator to fetch all IMGW-PIB data with rate limiting."""
+
+    def __init__(self, hass: HomeAssistant, api: ImgwApiClient) -> None:
+        """Initialize the global coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_global",
+            update_interval=timedelta(minutes=15),
+        )
+        self.api = api
+        self._semaphore = asyncio.Semaphore(2)
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch all data from IMGW API without blocking the loop."""
+        _LOGGER.debug("Fetching all IMGW-PIB data with rate limiting")
+
+        async def _fetch_with_limit(coro):
+            async with self._semaphore:
+                try:
+                    res = await coro
+                    await asyncio.sleep(0.2)
+                    return res
+                except Exception as err:
+                    _LOGGER.warning("Error fetching IMGW endpoint: %s", err)
+                    return []
+
+        results = await asyncio.gather(
+            _fetch_with_limit(self.api.get_all_synop_data()),
+            _fetch_with_limit(self.api.get_all_hydro_data()),
+            _fetch_with_limit(self.api.get_all_meteo_data()),
+            _fetch_with_limit(self.api.get_warnings_meteo()),
+            _fetch_with_limit(self.api.get_warnings_hydro()),
+        )
+
+        data: dict[str, Any] = {
+            DATA_TYPE_SYNOP: results[0],
+            DATA_TYPE_HYDRO: results[1],
+            DATA_TYPE_METEO: results[2],
+            DATA_TYPE_WARNINGS_METEO: results[3],
+            DATA_TYPE_WARNINGS_HYDRO: results[4],
+        }
+
+        if all(not r for r in results):
+            raise UpdateFailed("Failed to fetch any data from IMGW API")
+
+        return data
+
 
 class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Coordinator to fetch IMGW-PIB data."""
+    """Coordinator for a specific config entry serving sensors."""
 
     def __init__(
         self,
         hass: HomeAssistant,
-        api: ImgwApiClient,
-        config: dict[str, Any],
+        global_coordinator: ImgwGlobalDataCoordinator,
+        entry: ConfigEntry,
         update_interval: int,
     ) -> None:
-        """Initialize the coordinator."""
-        self.api = api
-        self.config = config
-        self.data_type: str = config[CONF_DATA_TYPE]
-        self.station_id: str | None = config.get(CONF_STATION_ID)
-        self.voivodeship: str | None = config.get(CONF_VOIVODESHIP)
-        self.powiat: str | None = config.get(CONF_POWIAT)
+        """Initialize the entry coordinator."""
+        self.global_coordinator = global_coordinator
+        self.config_entry = entry
+        self.config_data = dict(entry.data)
 
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_{self.data_type}_{self.station_id or self.voivodeship}",
+            name=f"{DOMAIN}_{entry.title}",
             update_interval=timedelta(minutes=update_interval),
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from IMGW API."""
-        try:
-            if self.data_type == DATA_TYPE_SYNOP:
-                data = await self.api.get_synop_data(self.station_id)
-                if data is None:
-                    raise UpdateFailed(f"No synoptic data for station {self.station_id}")
-                return self._parse_synop(data)
+        """Prepare specific slice of data for this entry."""
+        if not self.global_coordinator.data:
+            await self.global_coordinator.async_config_entry_first_refresh()
+        
+        global_data = self.global_coordinator.data
+        if not global_data:
+            raise UpdateFailed("Global IMGW data is unavailable")
 
-            elif self.data_type == DATA_TYPE_HYDRO:
-                data = await self.api.get_hydro_data(self.station_id)
-                if data is None:
-                    raise UpdateFailed(f"No hydro data for station {self.station_id}")
-                return self._parse_hydro(data)
+        ha_lat = self.hass.config.latitude
+        ha_lon = self.hass.config.longitude
 
-            elif self.data_type == DATA_TYPE_METEO:
-                data = await self.api.get_meteo_data(self.station_id)
-                if data is None:
-                    raise UpdateFailed(f"No meteo data for station {self.station_id}")
-                return self._parse_meteo(data)
+        if self.config_data.get(CONF_AUTO_DETECT):
+            self._update_auto_config(global_data, ha_lat, ha_lon)
 
-            elif self.data_type == DATA_TYPE_WARNINGS_METEO:
-                # Use powiat code for filtering if specific powiat selected,
-                # otherwise use voivodeship code (2-digit prefix)
-                if self.powiat and self.powiat != "all":
-                    teryt_filter = self.powiat
-                else:
-                    teryt_filter = self.voivodeship
-                data = await self.api.get_warnings_meteo(teryt_filter)
-                return self._parse_warnings_meteo(data)
+        result: dict[str, Any] = {
+            DATA_TYPE_SYNOP: {},
+            DATA_TYPE_HYDRO: {},
+            DATA_TYPE_METEO: {},
+            DATA_TYPE_WARNINGS_METEO: {},
+            DATA_TYPE_WARNINGS_HYDRO: {},
+            "auto": {},
+        }
 
-            elif self.data_type == DATA_TYPE_WARNINGS_HYDRO:
-                voiv_name = VOIVODESHIPS.get(self.voivodeship, "")
-                data = await self.api.get_warnings_hydro(voiv_name)
-                return self._parse_warnings_hydro(data)
+        # 1. Synop
+        for sid in self.config_data.get(CONF_SELECTED_SYNOP, []):
+            for item in global_data.get(DATA_TYPE_SYNOP, []):
+                if str(item.get("id_stacji")) == str(sid):
+                    parsed = self._parse_synop(item)
+                    # Coordinates for distance calculation
+                    s_coords = SYNOP_STATIONS.get(str(sid))
+                    s_lat = parsed.get("latitude") or (s_coords[0] if s_coords else None)
+                    s_lon = parsed.get("longitude") or (s_coords[1] if s_coords else None)
+                    if ha_lat and ha_lon and s_lat and s_lon:
+                        parsed["distance"] = round(haversine(ha_lat, ha_lon, s_lat, s_lon), 1)
+                        parsed["latitude"] = s_lat
+                        parsed["longitude"] = s_lon
+                    result[DATA_TYPE_SYNOP][sid] = parsed
+                    if self.config_data.get(CONF_AUTO_DETECT):
+                        result["auto"][DATA_TYPE_SYNOP] = parsed
+                    break
 
-            else:
-                raise UpdateFailed(f"Unknown data type: {self.data_type}")
+        # 2. Hydro
+        for sid in self.config_data.get(CONF_SELECTED_HYDRO, []):
+            for item in global_data.get(DATA_TYPE_HYDRO, []):
+                if str(item.get("id_stacji")) == str(sid):
+                    parsed = self._parse_hydro(item)
+                    if ha_lat and ha_lon and parsed.get("latitude") and parsed.get("longitude"):
+                        parsed["distance"] = round(haversine(ha_lat, ha_lon, parsed["latitude"], parsed["longitude"]), 1)
+                    result[DATA_TYPE_HYDRO][sid] = parsed
+                    if self.config_data.get(CONF_AUTO_DETECT):
+                        result["auto"][DATA_TYPE_HYDRO] = parsed
+                    break
 
-        except ImgwApiConnectionError as err:
-            raise UpdateFailed(f"Connection error: {err}") from err
-        except ImgwApiError as err:
-            raise UpdateFailed(f"API error: {err}") from err
+        # 3. Meteo
+        for sid in self.config_data.get(CONF_SELECTED_METEO, []):
+            for item in global_data.get(DATA_TYPE_METEO, []):
+                if str(item.get("kod_stacji")) == str(sid):
+                    parsed = self._parse_meteo(item)
+                    if ha_lat and ha_lon and parsed.get("latitude") and parsed.get("longitude"):
+                        parsed["distance"] = round(haversine(ha_lat, ha_lon, parsed["latitude"], parsed["longitude"]), 1)
+                    result[DATA_TYPE_METEO][sid] = parsed
+                    if self.config_data.get(CONF_AUTO_DETECT):
+                        result["auto"][DATA_TYPE_METEO] = parsed
+                    break
 
-    @staticmethod
-    def _safe_float(value: str | None) -> float | None:
-        """Safely convert a string to float."""
-        if value is None or value == "":
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
+        # 4. Warnings Meteo
+        if self.config_data.get(CONF_ENABLE_WARNINGS_METEO):
+            voivodeship = self.config_data.get(CONF_VOIVODESHIP)
+            powiat = self.config_data.get(CONF_POWIAT)
+            teryt_filter = powiat if (powiat and powiat != "all") else voivodeship
+            warnings = global_data.get(DATA_TYPE_WARNINGS_METEO, [])
+            filtered = [
+                w for w in warnings 
+                if any(t.startswith(teryt_filter) for t in w.get("teryt", []))
+            ] if teryt_filter else warnings
+            result[DATA_TYPE_WARNINGS_METEO] = self._parse_warnings_meteo(filtered)
 
-    @staticmethod
-    def _safe_int(value: str | None) -> int | None:
-        """Safely convert a string to int."""
-        if value is None or value == "":
-            return None
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return None
+        # 5. Warnings Hydro
+        if self.config_data.get(CONF_ENABLE_WARNINGS_HYDRO):
+            voivodeship = self.config_data.get(CONF_VOIVODESHIP)
+            voiv_name = VOIVODESHIPS.get(voivodeship, "")
+            warnings = global_data.get(DATA_TYPE_WARNINGS_HYDRO, [])
+            filtered = [
+                w for w in warnings
+                if any(voiv_name.lower() in area.get("wojewodztwo", "").lower() for area in w.get("obszary", []))
+            ] if voiv_name else warnings
+            result[DATA_TYPE_WARNINGS_HYDRO] = self._parse_warnings_hydro(filtered)
+
+        return result
+
+    def _update_auto_config(self, global_data: dict[str, Any], lat: float, lon: float) -> None:
+        """Update selected stations dynamically if HA moved."""
+        if lat is None or lon is None:
+            return
+
+        def find_nearest_synop(stations):
+            nearest, d_min = None, DEFAULT_MAX_DISTANCE
+            for s in stations:
+                sid = str(s.get("id_stacji"))
+                coords = SYNOP_STATIONS.get(sid)
+                if not coords:
+                    continue
+                d = haversine(lat, lon, coords[0], coords[1])
+                if d < d_min:
+                    d_min, nearest = d, sid
+            return nearest
+
+        def find_nearest(stations, lat_key, lon_key, id_key):
+            nearest, d_min = None, DEFAULT_MAX_DISTANCE
+            for s in stations:
+                try:
+                    s_lat = float(s.get(lat_key) or s.get("szerokosc") or 0)
+                    s_lon = float(s.get(lon_key) or s.get("dlugosc") or 0)
+                    if not s_lat or not s_lon:
+                        continue
+                    d = haversine(lat, lon, s_lat, s_lon)
+                    if d < d_min:
+                        d_min, nearest = d, s.get(id_key)
+                except (ValueError, TypeError):
+                    continue
+            return nearest
+
+        ns = find_nearest_synop(global_data.get(DATA_TYPE_SYNOP, []))
+        nh = find_nearest(global_data.get(DATA_TYPE_HYDRO, []), "lat", "lon", "id_stacji")
+        nm = find_nearest(global_data.get(DATA_TYPE_METEO, []), "lat", "lon", "kod_stacji")
+
+        if ns:
+            self.config_data[CONF_SELECTED_SYNOP] = [ns]
+        if nh:
+            self.config_data[CONF_SELECTED_HYDRO] = [nh]
+        if nm:
+            self.config_data[CONF_SELECTED_METEO] = [nm]
+
+        # Region inference
+        min_dist_v = float("inf")
+        best_voiv = None
+        for code, coords in VOIVODESHIP_CAPITALS.items():
+            dist = haversine(lat, lon, coords[0], coords[1])
+            if dist < min_dist_v:
+                min_dist_v, best_voiv = dist, code
+        if best_voiv:
+            self.config_data[CONF_VOIVODESHIP] = best_voiv
 
     def _parse_synop(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Parse synoptic data."""
+        """Safely parse synoptic data."""
         return {
             "station_name": data.get("stacja"),
             "station_id": data.get("id_stacji"),
@@ -129,10 +265,12 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "humidity": self._safe_float(data.get("wilgotnosc_wzgledna")),
             "precipitation": self._safe_float(data.get("suma_opadu")),
             "pressure": self._safe_float(data.get("cisnienie")),
+            "latitude": self._safe_float(data.get("lat") or data.get("szerokosc")),
+            "longitude": self._safe_float(data.get("lon") or data.get("dlugosc")),
         }
 
     def _parse_hydro(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Parse hydrological data."""
+        """Safely parse hydrological data."""
         return {
             "station_name": data.get("stacja"),
             "station_id": data.get("id_stacji"),
@@ -148,114 +286,96 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "flow_date": data.get("przeplyw_data"),
             "ice_phenomenon": self._safe_int(data.get("zjawisko_lodowe")),
             "ice_phenomenon_date": data.get("zjawisko_lodowe_data_pomiaru"),
-            "overgrowth_phenomenon": self._safe_int(data.get("zjawisko_zarastania")),
         }
 
     def _parse_meteo(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Parse meteorological data."""
+        """Safely parse meteorological data."""
         return {
             "station_name": data.get("nazwa_stacji"),
             "station_code": data.get("kod_stacji"),
             "longitude": self._safe_float(data.get("lon")),
             "latitude": self._safe_float(data.get("lat")),
             "ground_temperature": self._safe_float(data.get("temperatura_gruntu")),
-            "ground_temperature_date": data.get("temperatura_gruntu_data"),
             "air_temperature": self._safe_float(data.get("temperatura_powietrza")),
-            "air_temperature_date": data.get("temperatura_powietrza_data"),
             "wind_direction": self._safe_int(data.get("wiatr_kierunek")),
-            "wind_direction_date": data.get("wiatr_kierunek_data"),
             "wind_avg_speed": self._safe_float(data.get("wiatr_srednia_predkosc")),
-            "wind_avg_speed_date": data.get("wiatr_srednia_predkosc_data"),
             "wind_max_speed": self._safe_float(data.get("wiatr_predkosc_maksymalna")),
-            "wind_max_speed_date": data.get("wiatr_predkosc_maksymalna_data"),
             "humidity": self._safe_float(data.get("wilgotnosc_wzgledna")),
-            "humidity_date": data.get("wilgotnosc_wzgledna_data"),
             "wind_gust_10min": self._safe_float(data.get("wiatr_poryw_10min")),
-            "wind_gust_10min_date": data.get("wiatr_poryw_10min_data"),
             "precipitation_10min": self._safe_float(data.get("opad_10min")),
-            "precipitation_10min_date": data.get("opad_10min_data"),
         }
 
-    @staticmethod
-    def _parse_warnings_meteo(data: list[dict[str, Any]]) -> dict[str, Any]:
-        """Parse meteorological warnings."""
+    def _parse_warnings_meteo(self, data: list[dict[str, Any]]) -> dict[str, Any]:
+        """Safely parse meteorological warnings."""
         if not data:
-            return {
-                "active_warnings_count": 0,
-                "max_level": 0,
-                "warnings": [],
-            }
-
-        warnings_list = []
-        max_level = 0
+            return {"active_warnings_count": 0, "max_level": 0, "warnings": []}
+        w_list = []
+        max_lvl = 0
         for w in data:
-            level = int(w.get("stopien", 0))
-            max_level = max(max_level, level)
-            warnings_list.append({
-                "id": w.get("id"),
+            lvl = int(w.get("stopien", 0))
+            max_lvl = max(max_lvl, lvl)
+            w_list.append({
                 "event": w.get("nazwa_zdarzenia"),
-                "level": level,
+                "level": lvl,
                 "probability": int(w.get("prawdopodobienstwo", 0)),
                 "valid_from": w.get("obowiazuje_od"),
                 "valid_to": w.get("obowiazuje_do"),
-                "published": w.get("opublikowano"),
                 "content": w.get("tresc"),
                 "comment": w.get("komentarz"),
-                "office": w.get("biuro"),
             })
-
-        # Sort by level descending, then by valid_from
-        warnings_list.sort(key=lambda x: (-x["level"], x.get("valid_from", "")))
-
+        w_list.sort(key=lambda x: (-x["level"], x.get("valid_from", "")))
         return {
-            "active_warnings_count": len(warnings_list),
-            "max_level": max_level,
-            "warnings": warnings_list,
-            "latest_warning": warnings_list[0] if warnings_list else None,
+            "active_warnings_count": len(w_list),
+            "max_level": max_lvl,
+            "warnings": w_list,
+            "latest_warning": w_list[0] if w_list else None,
         }
 
-    @staticmethod
-    def _parse_warnings_hydro(data: list[dict[str, Any]]) -> dict[str, Any]:
-        """Parse hydrological warnings."""
+    def _parse_warnings_hydro(self, data: list[dict[str, Any]]) -> dict[str, Any]:
+        """Safely parse hydrological warnings."""
         if not data:
-            return {
-                "active_warnings_count": 0,
-                "max_level": 0,
-                "warnings": [],
-            }
-
-        warnings_list = []
-        max_level = 0
+            return {"active_warnings_count": 0, "max_level": 0, "warnings": []}
+        w_list = []
+        max_lvl = 0
         for w in data:
             level_raw = w.get("stopień", w.get("stopien", "0"))
             try:
-                level = abs(int(level_raw))
+                lvl = abs(int(level_raw))
             except (ValueError, TypeError):
-                level = 0
-            max_level = max(max_level, level)
-
-            areas = w.get("obszary", [])
-            area_descriptions = [a.get("opis", "") for a in areas]
-
-            warnings_list.append({
+                lvl = 0
+            max_lvl = max(max_lvl, lvl)
+            areas = [a.get("opis", "") for a in w.get("obszary", [])]
+            w_list.append({
                 "number": w.get("numer"),
                 "event": w.get("zdarzenie"),
-                "level": level,
-                "probability": int(w.get("prawdopodobienstwo", 0)),
+                "level": lvl,
                 "valid_from": w.get("data_od"),
                 "valid_to": w.get("data_do"),
-                "published": w.get("opublikowano"),
                 "description": w.get("przebieg"),
-                "comment": w.get("komentarz"),
-                "office": w.get("biuro"),
-                "areas": area_descriptions,
+                "areas": areas,
             })
-
-        warnings_list.sort(key=lambda x: (-x["level"], x.get("published", "")))
-
+        w_list.sort(key=lambda x: (-x["level"], x.get("number", "")))
         return {
-            "active_warnings_count": len(warnings_list),
-            "max_level": max_level,
-            "warnings": warnings_list,
-            "latest_warning": warnings_list[0] if warnings_list else None,
+            "active_warnings_count": len(w_list),
+            "max_level": max_lvl,
+            "warnings": w_list,
+            "latest_warning": w_list[0] if w_list else None,
         }
+
+    @staticmethod
+    def _safe_float(v: Any) -> float | None:
+        if v is None or v == "":
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _safe_int(v: Any) -> int | None:
+        if v is None or v == "":
+            return None
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            return None

@@ -10,34 +10,38 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import ImgwApiClient
 from .const import (
-    CONF_DATA_TYPE,
     CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     PLATFORMS,
 )
-from .coordinator import ImgwDataUpdateCoordinator
+from .coordinator import ImgwDataUpdateCoordinator, ImgwGlobalDataCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up IMGW-PIB Monitor from a config entry."""
-    session = async_get_clientsession(hass)
-    api = ImgwApiClient(session)
+    hass.data.setdefault(DOMAIN, {})
+    
+    # Initialize global coordinator if not already present
+    if "global_coordinator" not in hass.data[DOMAIN]:
+        session = async_get_clientsession(hass)
+        api = ImgwApiClient(session)
+        hass.data[DOMAIN]["global_coordinator"] = ImgwGlobalDataCoordinator(hass, api)
 
+    global_coordinator = hass.data[DOMAIN]["global_coordinator"]
     update_interval = entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
 
     coordinator = ImgwDataUpdateCoordinator(
         hass=hass,
-        api=api,
-        config=dict(entry.data),
+        global_coordinator=global_coordinator,
+        entry=entry,
         update_interval=update_interval,
     )
 
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

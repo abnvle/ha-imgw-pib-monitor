@@ -2,68 +2,64 @@
   "config": {
     "step": {
       "user": {
-        "title": "IMGW-PIB Monitor — Typ danych",
-        "description": "Wybierz rodzaj danych IMGW-PIB, które chcesz monitorować.",
+        "title": "Monitor IMGW-PIB",
+        "description": "Wybierz metodę konfiguracji integracji.",
         "data": {
-          "data_type": "Typ danych"
+          "setup_mode": "Metoda konfiguracji"
         }
       },
-      "station": {
-        "title": "IMGW-PIB Monitor — Stacja",
-        "description": "Wybierz stację pomiarową.",
+      "manual_start": {
+        "title": "Konfiguracja ręczna",
+        "description": "Wpisz nazwę stacji lub miasta (np. Warszawa).",
+        "data": {
+          "station_name": "Nazwa lokalizacji"
+        }
+      },
+      "select": {
+        "title": "Wybierz lokalizację",
+        "description": "Wybierz dokładnie jedną stację z wyników.",
         "data": {
           "station_id": "Stacja"
         }
       },
-      "voivodeship": {
-        "title": "IMGW-PIB Monitor — Województwo",
-        "description": "Wybierz województwo dla ostrzeżeń meteorologicznych.",
+      "options": {
+        "title": "Konfiguracja czujników",
+        "description": "Wybierz, które grupy czujników dodać.",
         "data": {
-          "voivodeship": "Województwo"
-        }
-      },
-      "powiat": {
-        "title": "IMGW-PIB Monitor — Powiat",
-        "description": "Wybierz powiat lub monitoruj całe województwo.",
-        "data": {
-          "powiat": "Powiat"
-        }
-      },
-      "voivodeship_hydro": {
-        "title": "IMGW-PIB Monitor — Województwo",
-        "description": "Wybierz województwo dla ostrzeżeń hydrologicznych.",
-        "data": {
-          "voivodeship": "Województwo"
-        }
-      },
-      "interval": {
-        "title": "IMGW-PIB Monitor — Interwał aktualizacji",
-        "description": "Ustaw częstotliwość aktualizacji danych (w minutach). Minimum: 5 min, Maksimum: 120 min.",
-        "data": {
-          "update_interval": "Interwał aktualizacji (minuty)"
+          "weather": "Dodaj czujniki pogodowe",
+          "river": "Dodaj czujniki rzeczne",
+          "warnings": "Dodaj ostrzeżenia pogodowe"
         }
       }
     },
     "error": {
-      "cannot_connect": "Nie można połączyć się z API IMGW-PIB.",
-      "no_stations": "Brak dostępnych stacji dla tego typu danych.",
-      "unknown": "Wystąpił nieznany błąd."
+      "cannot_connect": "Błąd połączenia z IMGW.",
+      "no_stations": "Nie znaleziono stacji o tej nazwie.",
+      "no_coordinates": "Współrzędne Home Assistant nie są ustawione. Skonfiguruj swoją lokalizację w ustawieniach HA lub użyj konfiguracji ręcznej.",
+      "unknown": "Nieoczekiwany błąd."
     },
     "abort": {
-      "already_configured": "Ta stacja/region jest już skonfigurowany dla tego typu danych."
+      "already_configured": "Lokalizacja jest już skonfigurowana.",
+      "no_coordinates": "Współrzędne Home Assistant nie są ustawione.",
+      "cannot_connect": "Błąd połączenia z IMGW.",
+      "no_stations_nearby": "Nie znaleziono żadnej stacji IMGW w promieniu 50km od Twojej lokalizacji."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "IMGW-PIB Monitor — Ustawienia",
-        "description": "Zaktualizuj ustawienia integracji.",
+        "title": "Ustawienia",
         "data": {
-          "update_interval": "Interwał aktualizacji (minuty)",
-          "station_id": "Stacja",
-          "voivodeship": "Województwo",
-          "powiat": "Powiat"
+          "update_interval": "Interwał aktualizacji (minuty)"
         }
+      }
+    }
+  },
+  "selector": {
+    "setup_mode": {
+      "options": {
+        "auto": "Konfiguracja automatyczna (Użyj lokalizacji GPS)",
+        "manual": "Konfiguracja ręczna (Wyszukaj po nazwie)"
       }
     }
   },
@@ -74,25 +70,37 @@
       "synop_wind_direction": { "name": "Kierunek wiatru" },
       "synop_humidity": { "name": "Wilgotność" },
       "synop_precipitation": { "name": "Suma opadu" },
-      "synop_pressure": { "name": "Ciśnienie atmosferyczne" },
-      "hydro_water_level": { "name": "Stan wody" },
-      "hydro_flow": { "name": "Przepływ wody" },
+      "synop_pressure": { "name": "Ciśnienie" },
+      "hydro_water_level": { "name": "Poziom wody" },
+      "hydro_flow": { "name": "Przepływ" },
       "hydro_water_temperature": { "name": "Temperatura wody" },
       "hydro_ice_phenomenon": { "name": "Zjawisko lodowe" },
       "meteo_air_temperature": { "name": "Temperatura powietrza" },
       "meteo_ground_temperature": { "name": "Temperatura gruntu" },
       "meteo_wind_avg_speed": { "name": "Średnia prędkość wiatru" },
       "meteo_wind_max_speed": { "name": "Maksymalna prędkość wiatru" },
-      "meteo_wind_gust": { "name": "Porywy wiatru (10 min)" },
+      "meteo_wind_gust": { "name": "Porywy wiatru" },
       "meteo_wind_direction": { "name": "Kierunek wiatru" },
       "meteo_humidity": { "name": "Wilgotność" },
-      "meteo_precipitation_10min": { "name": "Opad (10 min)" },
-      "warnings_meteo_count": { "name": "Aktywne ostrzeżenia meteo" },
+      "meteo_precipitation_10min": { "name": "Opad" },
+      "warnings_meteo_count": { "name": "Aktywne ostrzeżenia pogodowe" },
       "warnings_meteo_max_level": { "name": "Najwyższy stopień ostrzeżenia" },
-      "warnings_meteo_latest": { "name": "Ostatnie ostrzeżenie meteo" },
-      "warnings_hydro_count": { "name": "Aktywne ostrzeżenia hydro" },
-      "warnings_hydro_max_level": { "name": "Najwyższy stopień ostrzeżenia hydro" },
-      "warnings_hydro_latest": { "name": "Ostatnie ostrzeżenie hydro" }
+      "warnings_meteo_latest": { "name": "Ostatnie ostrzeżenie" },
+      "warnings_meteo_details": { "name": "Szczegóły ostrzeżenia" },
+      "warnings_hydro_count": { "name": "Aktywne ostrzeżenia rzeczne" },
+      "warnings_hydro_max_level": { "name": "Najwyższy stopień ostrzeżenia rz." },
+      "warnings_hydro_latest": { "name": "Ostatnie ostrzeżenie rzeczne" },
+      "warnings_hydro_details": { "name": "Szczegóły ostrzeżenia rzecznego" },
+      "station_id": { "name": "Identyfikator stacji" },
+      "river": { "name": "Nazwa rzeki" },
+      "distance": { "name": "Odległość do stacji" },
+      "api_status": {
+        "name": "Status API",
+        "state": {
+          "online": "Online",
+          "offline": "Offline"
+        }
+      }
     }
   }
 }

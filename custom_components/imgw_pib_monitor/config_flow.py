@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -16,99 +17,51 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
 )
 
 from .api import ImgwApiClient, ImgwApiError
 from .const import (
-    CONF_DATA_TYPE,
-    CONF_POWIAT,
+    CONF_AUTO_DETECT,
+    CONF_ENABLE_WARNINGS_HYDRO,
+    CONF_ENABLE_WARNINGS_METEO,
+    CONF_SELECTED_HYDRO,
+    CONF_SELECTED_METEO,
+    CONF_SELECTED_SYNOP,
+    CONF_SETUP_MODE,
     CONF_STATION_ID,
     CONF_STATION_NAME,
     CONF_UPDATE_INTERVAL,
     CONF_VOIVODESHIP,
-    DATA_TYPE_HYDRO,
-    DATA_TYPE_METEO,
-    DATA_TYPE_SYNOP,
-    DATA_TYPE_WARNINGS_HYDRO,
-    DATA_TYPE_WARNINGS_METEO,
-    DATA_TYPES,
+    DEFAULT_MAX_DISTANCE,
     DEFAULT_UPDATE_INTERVAL,
-    DEFAULT_UPDATE_INTERVAL_WARNINGS,
     DOMAIN,
     MAX_UPDATE_INTERVAL,
     MIN_UPDATE_INTERVAL,
-    VOIVODESHIPS,
+    SETUP_MODE_AUTO,
+    SETUP_MODE_MANUAL,
+    SYNOP_STATIONS,
+    VOIVODESHIP_CAPITALS,
 )
-from .teryt import POWIATY
+from .utils import haversine
 
 _LOGGER = logging.getLogger(__name__)
 
-POWIAT_ALL = "all"
-
-
-def _station_selector(stations: dict[str, str]) -> SelectSelector:
-    """Build a station SelectSelector."""
-    sorted_stations = sorted(stations.items(), key=lambda x: x[1])
-    options = [
-        SelectOptionDict(value=sid, label=name)
-        for sid, name in sorted_stations
-    ]
-    return SelectSelector(
-        SelectSelectorConfig(
-            options=options,
-            mode=SelectSelectorMode.DROPDOWN,
-        )
-    )
-
-
-def _voivodeship_selector() -> SelectSelector:
-    """Build a voivodeship SelectSelector."""
-    sorted_voivodeships = sorted(VOIVODESHIPS.items(), key=lambda x: x[1])
-    options = [
-        SelectOptionDict(value=code, label=name)
-        for code, name in sorted_voivodeships
-    ]
-    return SelectSelector(
-        SelectSelectorConfig(
-            options=options,
-            mode=SelectSelectorMode.DROPDOWN,
-        )
-    )
-
-
-def _powiat_selector(voivodeship_code: str) -> SelectSelector:
-    """Build a powiat SelectSelector for given voivodeship."""
-    powiaty = POWIATY.get(voivodeship_code, {})
-    sorted_powiaty = sorted(powiaty.items(), key=lambda x: x[1])
-
-    options = [
-        SelectOptionDict(value=POWIAT_ALL, label="— Całe województwo —"),
-    ]
-    options.extend(
-        SelectOptionDict(value=code, label=f"pow. {name}")
-        for code, name in sorted_powiaty
-    )
-    return SelectSelector(
-        SelectSelectorConfig(
-            options=options,
-            mode=SelectSelectorMode.DROPDOWN,
-        )
-    )
-
-
 class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for IMGW-PIB Monitor."""
+    """Handle a minimalist and smart config flow for IMGW-PIB Monitor."""
 
-    VERSION = 1
+    VERSION = 6
 
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._data: dict[str, Any] = {}
-        self._stations: dict[str, str] = {}
+        self._found_stations: list[dict[str, Any]] = []
 
     @staticmethod
     @callback
@@ -116,304 +69,227 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
         """Get the options flow for this handler."""
         return ImgwPibMonitorOptionsFlow(config_entry)
 
-    async def _fetch_stations(self) -> dict[str, str]:
-        """Fetch station list based on selected data type."""
-        api = ImgwApiClient(async_get_clientsession(self.hass))
-        data_type = self._data[CONF_DATA_TYPE]
-
-        if data_type == DATA_TYPE_SYNOP:
-            return await api.get_synop_stations()
-        elif data_type == DATA_TYPE_HYDRO:
-            return await api.get_hydro_stations()
-        elif data_type == DATA_TYPE_METEO:
-            return await api.get_meteo_stations()
-        return {}
-
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 1: Choose data type."""
+        """Initial choice: Automatic (GPS) or Manual Setup."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data[CONF_DATA_TYPE] = user_input[CONF_DATA_TYPE]
-
-            if user_input[CONF_DATA_TYPE] == DATA_TYPE_WARNINGS_METEO:
-                return await self.async_step_voivodeship()
-            if user_input[CONF_DATA_TYPE] == DATA_TYPE_WARNINGS_HYDRO:
-                return await self.async_step_voivodeship_hydro()
-            return await self.async_step_station()
-
-        data_type_options = [
-            SelectOptionDict(value=k, label=v)
-            for k, v in DATA_TYPES.items()
-        ]
+            if user_input[CONF_SETUP_MODE] == SETUP_MODE_AUTO:
+                if self.hass.config.latitude is None or self.hass.config.longitude is None:
+                    errors["base"] = "no_coordinates"
+                else:
+                    return await self.async_step_auto()
+            else:
+                return await self.async_step_manual_start()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_DATA_TYPE): SelectSelector(
+                    vol.Required(CONF_SETUP_MODE, default=SETUP_MODE_AUTO): SelectSelector(
                         SelectSelectorConfig(
-                            options=data_type_options,
+                            options=[
+                                SelectOptionDict(value=SETUP_MODE_AUTO, label="auto"),
+                                SelectOptionDict(value=SETUP_MODE_MANUAL, label="manual"),
+                            ],
                             mode=SelectSelectorMode.DROPDOWN,
+                            translation_key="setup_mode",
                         )
                     ),
                 }
             ),
+            errors=errors,
         )
 
-    async def async_step_station(
+    async def async_step_auto(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Automatic Path: Find nearest stations of EACH type and finish."""
+        lat = self.hass.config.latitude
+        lon = self.hass.config.longitude
+
+        try:
+            api = ImgwApiClient(async_get_clientsession(self.hass))
+            results = await asyncio.gather(
+                api.get_all_synop_data(),
+                api.get_all_hydro_data(),
+                api.get_all_meteo_data(),
+            )
+            synop_data, hydro_data, meteo_data = results
+
+            def find_nearest_synop(stations):
+                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
+                for s in stations:
+                    sid = str(s.get("id_stacji"))
+                    coords = SYNOP_STATIONS.get(sid)
+                    if not coords:
+                        continue
+                    d = haversine(lat, lon, coords[0], coords[1])
+                    if d < dist_min:
+                        dist_min, nearest = d, sid
+                return nearest
+
+            def find_nearest(stations, lat_key, lon_key, id_key):
+                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
+                for s in stations:
+                    try:
+                        s_lat = float(s.get(lat_key) or s.get("szerokosc") or 0)
+                        s_lon = float(s.get(lon_key) or s.get("dlugosc") or 0)
+                        if not s_lat or not s_lon:
+                            continue
+                        d = haversine(lat, lon, s_lat, s_lon)
+                        if d < dist_min:
+                            dist_min, nearest = d, s.get(id_key)
+                    except (ValueError, TypeError):
+                        continue
+                return nearest
+
+            # Find nearest for each type independently
+            ns = find_nearest_synop(synop_data)
+            nh = find_nearest(hydro_data, "lat", "lon", "id_stacji")
+            nm = find_nearest(meteo_data, "lat", "lon", "kod_stacji")
+
+            if not ns and not nh and not nm:
+                return self.async_abort(reason="no_stations_nearby")
+
+            final_config = {
+                CONF_AUTO_DETECT: True,
+                CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL,
+                CONF_ENABLE_WARNINGS_METEO: True,
+                CONF_ENABLE_WARNINGS_HYDRO: True,
+                CONF_VOIVODESHIP: self._infer_voivodeship(),
+            }
+            
+            if ns:
+                final_config[CONF_SELECTED_SYNOP] = [ns]
+            if nh:
+                final_config[CONF_SELECTED_HYDRO] = [nh]
+            if nm:
+                final_config[CONF_SELECTED_METEO] = [nm]
+
+            return self.async_create_entry(title="IMGW Auto-Discovery", data=final_config)
+
+        except Exception as e:
+            _LOGGER.error("Auto-discovery failed: %s", e)
+            return self.async_abort(reason="cannot_connect")
+
+    async def async_step_manual_start(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 2a: Choose station."""
-        errors: dict[str, str] = {}
-
+        """Manual STEP 1: Search."""
         if user_input is not None:
-            station_id = user_input[CONF_STATION_ID]
-            station_name = self._stations.get(station_id, station_id)
-            self._data[CONF_STATION_ID] = station_id
-            self._data[CONF_STATION_NAME] = station_name
-            return await self.async_step_interval()
+            self._data[CONF_STATION_NAME] = user_input[CONF_STATION_NAME]
+            return await self.async_step_select()
 
-        if not self._stations:
+        return self.async_show_form(
+            step_id="manual_start",
+            data_schema=vol.Schema({
+                vol.Required(CONF_STATION_NAME): TextSelector(TextSelectorConfig(type="text"))
+            }),
+        )
+
+    async def async_step_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manual STEP 2: Select Result."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            selected_station = next(
+                s for s in self._found_stations if f"{s['type']}:{s['id']}" == user_input[CONF_STATION_ID]
+            )
+            self._data.update(selected_station)
+            return await self.async_step_options()
+
+        if not self._found_stations:
             try:
-                self._stations = await self._fetch_stations()
-                if not self._stations:
-                    errors["base"] = "no_stations"
+                api = ImgwApiClient(async_get_clientsession(self.hass))
+                q = self._data[CONF_STATION_NAME].lower()
+                synop = await api.get_synop_stations()
+                hydro = await api.get_hydro_stations()
+                meteo = await api.get_meteo_stations()
+                for sid, name in synop.items():
+                    if q in name.lower():
+                        self._found_stations.append({"id": sid, "name": name, "type": "synop", "label": f"{name} (Weather)"})
+                for sid, name in hydro.items():
+                    if q in name.lower():
+                        self._found_stations.append({"id": sid, "name": name, "type": "hydro", "label": f"{name} (River)"})
+                for sid, name in meteo.items():
+                    if q in name.lower():
+                        self._found_stations.append({"id": sid, "name": name, "type": "meteo", "label": f"{name} (Meteo)"})
             except ImgwApiError:
                 errors["base"] = "cannot_connect"
 
+        if not self._found_stations and not errors:
+            errors["base"] = "no_stations"
         if errors:
-            return self.async_show_form(
-                step_id="station",
-                data_schema=vol.Schema({}),
-                errors=errors,
-            )
+            return self.async_show_form(step_id="manual_start", errors=errors)
 
         return self.async_show_form(
-            step_id="station",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_STATION_ID): _station_selector(
-                        self._stations
-                    ),
-                }
-            ),
+            step_id="select",
+            data_schema=vol.Schema({
+                vol.Required(CONF_STATION_ID): SelectSelector(SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=f"{s['type']}:{s['id']}", label=s['label'])
+                        for s in self._found_stations
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN
+                ))
+            }),
         )
 
-    async def async_step_voivodeship(
+    async def async_step_options(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 2b: Choose voivodeship (for meteo warnings → then powiat)."""
+        """Manual STEP 3: Toggles."""
         if user_input is not None:
-            self._data[CONF_VOIVODESHIP] = user_input[CONF_VOIVODESHIP]
-            return await self.async_step_powiat()
+            final_config = {
+                CONF_AUTO_DETECT: False,
+                CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL,
+            }
+            st, sid = self._data["type"], self._data["id"]
+            if user_input.get("weather"):
+                if st == "synop":
+                    final_config[CONF_SELECTED_SYNOP] = [sid]
+                elif st == "meteo":
+                    final_config[CONF_SELECTED_METEO] = [sid]
+            if user_input.get("river") and st == "hydro":
+                final_config[CONF_SELECTED_HYDRO] = [sid]
+            if user_input.get("warnings"):
+                final_config[CONF_ENABLE_WARNINGS_METEO] = True
+                final_config[CONF_ENABLE_WARNINGS_HYDRO] = True
+                final_config[CONF_VOIVODESHIP] = self._infer_voivodeship()
+            return self.async_create_entry(title=self._data["name"], data=final_config)
 
-        return self.async_show_form(
-            step_id="voivodeship",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_VOIVODESHIP): _voivodeship_selector(),
-                }
-            ),
-        )
+        schema = {}
+        if self._data["type"] in ("synop", "meteo"):
+            schema[vol.Optional("weather", default=True)] = BooleanSelector()
+        if self._data["type"] == "hydro":
+            schema[vol.Optional("river", default=True)] = BooleanSelector()
+        schema[vol.Optional("warnings", default=True)] = BooleanSelector()
+        return self.async_show_form(step_id="options", data_schema=vol.Schema(schema))
 
-    async def async_step_powiat(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Step 2c: Choose powiat within voivodeship (meteo warnings)."""
-        if user_input is not None:
-            self._data[CONF_POWIAT] = user_input[CONF_POWIAT]
-            return await self.async_step_interval()
-
-        voivodeship_code = self._data[CONF_VOIVODESHIP]
-
-        return self.async_show_form(
-            step_id="powiat",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_POWIAT, default=POWIAT_ALL
-                    ): _powiat_selector(voivodeship_code),
-                }
-            ),
-        )
-
-    async def async_step_voivodeship_hydro(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Step 2d: Choose voivodeship (for hydro warnings — no powiat)."""
-        if user_input is not None:
-            self._data[CONF_VOIVODESHIP] = user_input[CONF_VOIVODESHIP]
-            return await self.async_step_interval()
-
-        return self.async_show_form(
-            step_id="voivodeship_hydro",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_VOIVODESHIP): _voivodeship_selector(),
-                }
-            ),
-        )
-
-    async def async_step_interval(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Step 3: Configure update interval."""
-        if user_input is not None:
-            self._data[CONF_UPDATE_INTERVAL] = user_input[CONF_UPDATE_INTERVAL]
-
-            data_type = self._data[CONF_DATA_TYPE]
-            if data_type == DATA_TYPE_WARNINGS_METEO:
-                powiat = self._data.get(CONF_POWIAT, POWIAT_ALL)
-                if powiat == POWIAT_ALL:
-                    unique_id = f"{data_type}_{self._data[CONF_VOIVODESHIP]}"
-                else:
-                    unique_id = f"{data_type}_{powiat}"
-            else:
-                station_or_voiv = self._data.get(CONF_STATION_ID) or self._data.get(
-                    CONF_VOIVODESHIP
-                )
-                unique_id = f"{data_type}_{station_or_voiv}"
-
-            await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured()
-
-            title = self._build_title()
-            return self.async_create_entry(title=title, data=self._data)
-
-        is_warning = self._data[CONF_DATA_TYPE] in (
-            DATA_TYPE_WARNINGS_METEO,
-            DATA_TYPE_WARNINGS_HYDRO,
-        )
-        default = (
-            DEFAULT_UPDATE_INTERVAL_WARNINGS if is_warning else DEFAULT_UPDATE_INTERVAL
-        )
-
-        return self.async_show_form(
-            step_id="interval",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_UPDATE_INTERVAL, default=default): vol.All(
-                        vol.Coerce(int),
-                        vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL),
-                    ),
-                }
-            ),
-        )
-
-    def _build_title(self) -> str:
-        """Build a descriptive title for the config entry."""
-        data_type = self._data[CONF_DATA_TYPE]
-        type_label = DATA_TYPES.get(data_type, data_type)
-
-        if data_type == DATA_TYPE_WARNINGS_METEO:
-            voiv_code = self._data.get(CONF_VOIVODESHIP, "")
-            voiv_name = VOIVODESHIPS.get(voiv_code, voiv_code)
-            powiat_code = self._data.get(CONF_POWIAT, POWIAT_ALL)
-            if powiat_code != POWIAT_ALL:
-                powiaty = POWIATY.get(voiv_code, {})
-                powiat_name = powiaty.get(powiat_code, powiat_code)
-                return f"IMGW {type_label} — pow. {powiat_name}"
-            return f"IMGW {type_label} — woj. {voiv_name}"
-
-        if data_type == DATA_TYPE_WARNINGS_HYDRO:
-            voiv_code = self._data.get(CONF_VOIVODESHIP, "")
-            voiv_name = VOIVODESHIPS.get(voiv_code, voiv_code)
-            return f"IMGW {type_label} — {voiv_name}"
-
-        station_name = self._data.get(CONF_STATION_NAME, "")
-        return f"IMGW {type_label} — {station_name}"
-
+    def _infer_voivodeship(self) -> str | None:
+        """Infer voivodeship from coordinates."""
+        lat, lon = self.hass.config.latitude, self.hass.config.longitude
+        if lat is None or lon is None:
+            return None
+        min_d, best_c = float("inf"), None
+        for c, coords in VOIVODESHIP_CAPITALS.items():
+            d = haversine(lat, lon, coords[0], coords[1])
+            if d < min_d:
+                min_d, best_c = d, c
+        return best_c
 
 class ImgwPibMonitorOptionsFlow(OptionsFlow):
-    """Handle options for IMGW-PIB Monitor."""
-
+    """Handle options flow."""
     def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
         self._config_entry = config_entry
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Manage the options."""
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Manage options."""
         if user_input is not None:
-            new_data = {**self._config_entry.data, **user_input}
-
-            # Resolve station name if station was changed
-            if CONF_STATION_ID in user_input:
-                data_type = self._config_entry.data.get(CONF_DATA_TYPE)
-                try:
-                    api = ImgwApiClient(async_get_clientsession(self.hass))
-                    if data_type == DATA_TYPE_SYNOP:
-                        stations = await api.get_synop_stations()
-                    elif data_type == DATA_TYPE_HYDRO:
-                        stations = await api.get_hydro_stations()
-                    else:
-                        stations = await api.get_meteo_stations()
-                    new_data[CONF_STATION_NAME] = stations.get(
-                        user_input[CONF_STATION_ID],
-                        user_input[CONF_STATION_ID],
-                    )
-                except ImgwApiError:
-                    pass
-
-            self.hass.config_entries.async_update_entry(
-                self._config_entry, data=new_data
-            )
             return self.async_create_entry(title="", data=user_input)
-
-        data_type = self._config_entry.data.get(CONF_DATA_TYPE)
-        current_interval = self._config_entry.data.get(
-            CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
-        )
-
-        schema_dict: dict[vol.Marker, Any] = {
-            vol.Required(CONF_UPDATE_INTERVAL, default=current_interval): vol.All(
-                vol.Coerce(int),
-                vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL),
-            ),
-        }
-
-        # Station-based types
-        if data_type in (DATA_TYPE_SYNOP, DATA_TYPE_HYDRO, DATA_TYPE_METEO):
-            try:
-                api = ImgwApiClient(async_get_clientsession(self.hass))
-                if data_type == DATA_TYPE_SYNOP:
-                    stations = await api.get_synop_stations()
-                elif data_type == DATA_TYPE_HYDRO:
-                    stations = await api.get_hydro_stations()
-                else:
-                    stations = await api.get_meteo_stations()
-
-                current_station = self._config_entry.data.get(CONF_STATION_ID)
-                schema_dict[
-                    vol.Required(CONF_STATION_ID, default=current_station)
-                ] = _station_selector(stations)
-            except ImgwApiError:
-                _LOGGER.warning("Could not fetch stations for options flow")
-
-        # Meteo warnings — powiat selection
-        if data_type == DATA_TYPE_WARNINGS_METEO:
-            voiv_code = self._config_entry.data.get(CONF_VOIVODESHIP)
-            current_powiat = self._config_entry.data.get(CONF_POWIAT, POWIAT_ALL)
-
-            schema_dict[
-                vol.Required(CONF_VOIVODESHIP, default=voiv_code)
-            ] = _voivodeship_selector()
-
-            if voiv_code:
-                schema_dict[
-                    vol.Required(CONF_POWIAT, default=current_powiat)
-                ] = _powiat_selector(voiv_code)
-
-        # Hydro warnings — voivodeship only
-        if data_type == DATA_TYPE_WARNINGS_HYDRO:
-            current_voiv = self._config_entry.data.get(CONF_VOIVODESHIP)
-            schema_dict[
-                vol.Required(CONF_VOIVODESHIP, default=current_voiv)
-            ] = _voivodeship_selector()
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(schema_dict),
-        )
+        return self.async_show_form(step_id="init", data_schema=vol.Schema({
+            vol.Required(
+                CONF_UPDATE_INTERVAL, 
+                default=self._config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL))
+        }))
