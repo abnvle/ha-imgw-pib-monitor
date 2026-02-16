@@ -1,0 +1,143 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Monitor IMGW-PIB",
+        "description": "Wybierz metodę konfiguracji integracji.",
+        "data": {
+          "setup_mode": "Metoda konfiguracji"
+        }
+      },
+      "auto_options": {
+        "title": "Wybór danych",
+        "description": "Wybierz, które typy danych chcesz dodać:",
+        "data": {
+          "add_synop": "Dane synoptyczne",
+          "add_meteo": "Dane meteorologiczne",
+          "add_hydro": "Dane hydrologiczne",
+          "enable_warnings_meteo": "Włącz ostrzeżenia meteorologiczne",
+          "enable_warnings_hydro": "Włącz ostrzeżenia hydrologiczne",
+          "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu"
+        }
+      },
+      "manual_start": {
+        "title": "Konfiguracja ręczna",
+        "description": "Wpisz nazwę swojego miasta lub miejscowości",
+        "data": {
+          "location_name": "Nazwa miejscowości"
+        }
+      },
+      "manual_select_location": {
+        "title": "Wybierz lokalizację",
+        "description": "Znaleziono kilka lokalizacji o podanej nazwie. Wybierz właściwą:",
+        "data": {
+          "location_choice": "Lokalizacja"
+        }
+      },
+      "manual_options": {
+        "title": "Wybór danych",
+        "description": "Wybierz, które typy danych chcesz dodać:",
+        "data": {
+          "add_synop": "Dane synoptyczne",
+          "add_meteo": "Dane meteorologiczne",
+          "add_hydro": "Dane hydrologiczne",
+          "enable_warnings_meteo": "Włącz ostrzeżenia meteorologiczne",
+          "enable_warnings_hydro": "Włącz ostrzeżenia hydrologiczne",
+          "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu"
+        }
+      },
+      "select": {
+        "title": "Wybierz lokalizację",
+        "description": "Wybierz dokładnie jedną stację z wyników.",
+        "data": {
+          "station_id": "Stacja"
+        }
+      },
+      "options": {
+        "title": "Konfiguracja czujników",
+        "description": "Wybierz, które grupy czujników dodać.",
+        "data": {
+          "weather": "Dodaj czujniki pogodowe",
+          "river": "Dodaj czujniki hydro",
+          "warnings": "Dodaj ostrzeżenia pogodowe"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Błąd połączenia z IMGW.",
+      "no_stations": "Nie znaleziono stacji o tej nazwie.",
+      "no_coordinates": "Współrzędne Home Assistant nie są ustawione. Skonfiguruj swoją lokalizację w ustawieniach HA lub użyj konfiguracji ręcznej.",
+      "location_not_found": "Nie znaleziono lokalizacji. Wpisz poprawną nazwę miasta lub miejscowości w Polsce.",
+      "no_stations_nearby": "Nie znaleziono stacji meteorologicznych w pobliżu tej lokalizacji.",
+      "invalid_selection": "Nieprawidłowy wybór lokalizacji.",
+      "unknown": "Nieoczekiwany błąd."
+    },
+    "abort": {
+      "already_configured": "Lokalizacja jest już skonfigurowana.",
+      "no_coordinates": "Współrzędne Home Assistant nie są ustawione.",
+      "cannot_connect": "Błąd połączenia z IMGW.",
+      "no_stations_nearby": "Nie znaleziono żadnej stacji IMGW w promieniu 50km od Twojej lokalizacji."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ustawienia",
+        "data": {
+          "update_interval": "Interwał aktualizacji (minuty)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "setup_mode": {
+      "options": {
+        "auto": "Konfiguracja automatyczna (Użyj lokalizacji GPS)",
+        "manual": "Konfiguracja ręczna (Wyszukaj po nazwie)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "synop_temperature": { "name": "Temperatura{station_suffix}" },
+      "synop_wind_speed": { "name": "Prędkość wiatru{station_suffix}" },
+      "synop_wind_direction": { "name": "Kierunek wiatru{station_suffix}" },
+      "synop_humidity": { "name": "Wilgotność{station_suffix}" },
+      "synop_precipitation": { "name": "Suma opadu{station_suffix}" },
+      "synop_pressure": { "name": "Ciśnienie{station_suffix}" },
+      "synop_station_id": { "name": "ID stacji synop{station_suffix}" },
+      "synop_distance": { "name": "Odległość stacji synop{station_suffix}" },
+      "hydro_water_level": { "name": "Poziom wody{station_suffix}" },
+      "hydro_flow": { "name": "Przepływ{station_suffix}" },
+      "hydro_water_temperature": { "name": "Temperatura wody{station_suffix}" },
+      "hydro_ice_phenomenon": { "name": "Zjawisko lodowe{station_suffix}" },
+      "hydro_station_id": { "name": "ID stacji hydro{station_suffix}" },
+      "hydro_distance": { "name": "Odległość stacji hydro{station_suffix}" },
+      "meteo_air_temperature": { "name": "Temperatura powietrza{station_suffix}" },
+      "meteo_ground_temperature": { "name": "Temperatura gruntu{station_suffix}" },
+      "meteo_wind_avg_speed": { "name": "Średnia prędkość wiatru{station_suffix}" },
+      "meteo_wind_max_speed": { "name": "Maksymalna prędkość wiatru{station_suffix}" },
+      "meteo_wind_gust": { "name": "Porywy wiatru{station_suffix}" },
+      "meteo_wind_direction": { "name": "Kierunek wiatru{station_suffix}" },
+      "meteo_humidity": { "name": "Wilgotność{station_suffix}" },
+      "meteo_precipitation_10min": { "name": "Opad{station_suffix}" },
+      "meteo_station_id": { "name": "ID stacji meteo{station_suffix}" },
+      "meteo_distance": { "name": "Odległość stacji meteo{station_suffix}" },
+      "warnings_meteo_count": { "name": "Aktywne ostrzeżenia pogodowe{station_suffix}" },
+      "warnings_meteo_max_level": { "name": "Najwyższy stopień ostrzeżenia{station_suffix}" },
+      "warnings_meteo_latest": { "name": "Ostatnie ostrzeżenie{station_suffix}" },
+      "warnings_meteo_details": { "name": "Szczegóły ostrzeżenia meteo{station_suffix}" },
+      "warnings_hydro_count": { "name": "Aktywne ostrzeżenia hydro{station_suffix}" },
+      "warnings_hydro_max_level": { "name": "Najwyższy stopień ostrzeżenia hydro{station_suffix}" },
+      "warnings_hydro_latest": { "name": "Ostatnie ostrzeżenie hydro{station_suffix}" },
+      "warnings_hydro_details": { "name": "Szczegóły ostrzeżenia hydro{station_suffix}" },
+      "api_status": {
+        "name": "Status API",
+        "state": {
+          "online": "Online",
+          "offline": "Offline"
+        }
+      }
+    }
+  }
+}

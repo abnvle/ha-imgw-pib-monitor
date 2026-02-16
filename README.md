@@ -1,0 +1,444 @@
+# IMGW-PIB Monitor dla Home Assistant
+
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/abnvle/ha-imgw-pib-monitor)](https://github.com/abnvle/ha-imgw-pib-monitor/releases)
+[![Downloads](https://img.shields.io/github/downloads/abnvle/ha-imgw-pib-monitor/total)](https://github.com/abnvle/ha-imgw-pib-monitor/releases)
+[![License: MIT](https://img.shields.io/github/license/abnvle/ha-imgw-pib-monitor)](https://github.com/abnvle/ha-imgw-pib-monitor/blob/main/LICENSE)
+
+[English version](README_EN.md)
+
+Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy). Dostarcza dane pogodowe, hydrologiczne i ostrzeżenia dla dowolnej lokalizacji w Polsce.
+
+## Funkcje
+
+### Podstawowe
+
+- **Dwa tryby konfiguracji** - automatyczny (GPS) lub manualny (wpisanie lokalizacji)
+- **Config Flow UI** - konfiguracja przez interfejs, zero YAML
+- **5 źródeł danych** - synoptyczne, hydrologiczne, meteorologiczne, ostrzeżenia meteo, ostrzeżenia hydro
+- **32 sensory** - temperatura, wiatr, wilgotność, ciśnienie, stan wody, przepływ i inne
+- **Wiele instancji** - możliwość dodania integracji wielokrotnie dla różnych lokalizacji
+- **Tłumaczenia PL/EN**
+- **Bez klucza API** - dane z publicznego API IMGW-PIB
+
+### Zaawansowane
+
+- **Auto-Discovery** - automatyczne wykrywanie i aktualizacja najbliższych stacji na podstawie lokalizacji Home Assistant
+- **Geokodowanie** - wyszukiwanie lokalizacji po nazwie z podpowiedziami (gmina, powiat, województwo)
+- **Filtrowanie ostrzeżeń według powiatu** - precyzyjne filtrowanie ostrzeżeń meteorologicznych i hydrologicznych z kodami TERYT
+- **Automatyczne wykrywanie województwa i powiatu** - system sam rozpoznaje region na podstawie współrzędnych
+- **Obliczanie odległości** - każdy sensor pokazuje odległość do stacji pomiarowej
+- **Globalny koordynator** - centralne pobieranie danych z rate limiting, oszczędność zapytań do API
+- **Options Flow** - zmiana interwału aktualizacji w dowolnym momencie (5-120 minut)
+- **Współrzędne geograficzne** - wszystkie sensory zawierają współrzędne stacji w atrybutach
+
+## Zrzuty ekranu
+
+| Wpisy integracji | Ostrzeżenia meteo | Dane meteorologiczne |
+|:---:|:---:|:---:|
+| ![Integracje](docs/integrations.png) | ![Ostrzeżenia](docs/warnings.png) | ![Meteo](docs/meteo.png) |
+
+## Tryby konfiguracji
+
+### Tryb automatyczny (Auto-Discovery)
+
+System wykorzystuje współrzędne GPS z konfiguracji Home Assistant. Po wybraniu tego trybu integracja automatycznie wyszukuje najbliższe stacje pomiarowe wszystkich typów (synoptyczne, hydrologiczne, meteorologiczne) w promieniu 50 km. W kolejnym kroku możesz wybrać, które typy danych chcesz monitorować.
+
+Funkcje trybu automatycznego:
+- Automatyczne wykrywanie najbliższej stacji dla każdego typu danych
+- Dynamiczna aktualizacja stacji jeśli zmieni się lokalizacja Home Assistant
+- Automatyczne rozpoznanie województwa i powiatu dla ostrzeżeń
+- Jeden wpis integracji obsługuje wszystkie wybrane typy danych
+
+### Tryb manualny
+
+System pyta o nazwę miejscowości lub adres. Po wpisaniu nazwa jest wyszukiwana przez IMGW API Proxy, które zwraca listę propozycji z pełnymi szczegółami (nazwa miejscowości, gmina, powiat, województwo, kod TERYT). Po wybraniu lokalizacji system wyszukuje najbliższe stacje pomiarowe.
+
+Funkcje trybu manualnego:
+- Wyszukiwanie lokalizacji po nazwie z danymi z IMGW API
+- Automatyczne pobieranie kodu TERYT powiatu z API
+- Automatyczne rozpoznanie województwa i powiatu
+- Możliwość wybrania dowolnej lokalizacji w Polsce
+- Sortowanie wyników według rangi (najważniejsze miejscowości na górze)
+- Jeden wpis integracji obsługuje wszystkie wybrane typy danych
+
+## Sensory
+
+### Synoptyczne (8 sensorów)
+
+| Sensor | Jednostka | Typ |
+|---|---|---|
+| Temperatura | °C | Pomiar |
+| Prędkość wiatru | m/s | Pomiar |
+| Kierunek wiatru | ° | Pomiar |
+| Wilgotność | % | Pomiar |
+| Suma opadu | mm | Pomiar |
+| Ciśnienie atmosferyczne | hPa | Pomiar |
+| ID stacji synop | - | Diagnostyczny |
+| Odległość synop | km | Diagnostyczny |
+
+Atrybuty: nazwa stacji, ID stacji, data pomiaru, godzina pomiaru, współrzędne geograficzne, odległość
+
+### Hydrologiczne (6 sensorów)
+
+| Sensor | Jednostka | Typ |
+|---|---|---|
+| Stan wody | cm | Pomiar |
+| Przepływ wody | m³/s | Pomiar |
+| Temperatura wody | °C | Pomiar |
+| Zjawisko lodowe | kod | Pomiar |
+| ID stacji hydro | - | Diagnostyczny |
+| Odległość hydro | km | Diagnostyczny |
+
+Atrybuty: nazwa stacji, ID stacji, nazwa rzeki, województwo, współrzędne geograficzne, odległość, daty pomiarów dla poszczególnych parametrów
+
+### Meteorologiczne (10 sensorów)
+
+| Sensor | Jednostka | Typ |
+|---|---|---|
+| Temperatura powietrza | °C | Pomiar |
+| Temperatura gruntu | °C | Pomiar |
+| Średnia prędkość wiatru | m/s | Pomiar |
+| Maksymalna prędkość wiatru | m/s | Pomiar |
+| Porywy wiatru (10 min) | m/s | Pomiar |
+| Kierunek wiatru | ° | Pomiar |
+| Wilgotność | % | Pomiar |
+| Opad (10 min) | mm | Pomiar |
+| ID stacji meteo | - | Diagnostyczny |
+| Odległość meteo | km | Diagnostyczny |
+
+Atrybuty: nazwa stacji, kod stacji, współrzędne geograficzne, odległość
+
+### Ostrzeżenia meteorologiczne (4 sensory)
+
+| Sensor | Opis | Typ |
+|---|---|---|
+| Liczba aktywnych ostrzeżeń | Ilość bieżących ostrzeżeń | Pomiar |
+| Najwyższy stopień ostrzeżenia | Najwyższy aktywny poziom (1-3) | Pomiar |
+| Ostatnie ostrzeżenie | Najpoważniejsze ostrzeżenie | Informacyjny |
+| Szczegóły ostrzeżenia | Treść i komentarz ostrzeżenia | Diagnostyczny |
+
+Atrybuty dla "Ostatnie ostrzeżenie": nazwa zdarzenia, stopień, prawdopodobieństwo, ważność od-do
+Atrybuty dla "Szczegóły": pełna treść ostrzeżenia, komentarz
+
+Ostrzeżenia można filtrować według:
+- Województwa (16 województw)
+- Powiatu (dokładniejsze filtrowanie) - opcjonalne
+
+### Ostrzeżenia hydrologiczne (4 sensory)
+
+| Sensor | Opis | Typ |
+|---|---|---|
+| Liczba aktywnych ostrzeżeń | Ilość bieżących ostrzeżeń hydro | Pomiar |
+| Najwyższy stopień ostrzeżenia hydro | Najwyższy aktywny poziom | Pomiar |
+| Ostatnie ostrzeżenie hydro | Najpoważniejsze ostrzeżenie hydro | Informacyjny |
+| Szczegóły ostrzeżenia hydro | Opis i obszary zagrożone | Diagnostyczny |
+
+Atrybuty dla "Ostatnie ostrzeżenie": numer, zdarzenie, stopień, prawdopodobieństwo, ważność od-do
+Atrybuty dla "Szczegóły": pełny opis przebiegu, lista obszarów
+
+Ostrzeżenia można filtrować według:
+- Województwa (16 województw)
+- Powiatu (wyszukiwanie w opisie obszarów) - opcjonalne
+
+## Instalacja
+
+### HACS (zalecane)
+
+1. Otwórz HACS w Home Assistant
+2. Kliknij **⋮** - **Custom repositories**
+3. Dodaj `https://github.com/abnvle/ha-imgw-pib-monitor` z kategorią **Integration**
+4. Wyszukaj **IMGW-PIB Monitor** i zainstaluj
+5. Uruchom ponownie Home Assistant
+
+### Ręczna
+
+1. Pobierz repozytorium
+2. Skopiuj `custom_components/imgw_pib_monitor` do katalogu `custom_components/`
+3. Uruchom ponownie Home Assistant
+
+## Konfiguracja
+
+### Tryb automatyczny
+
+1. Przejdź do **Ustawienia - Urządzenia i usługi - Dodaj integrację**
+2. Wyszukaj **IMGW-PIB Monitor**
+3. Wybierz **Automatyczny (GPS)**
+4. System znajdzie najbliższe stacje dla wszystkich typów danych
+5. Zaznacz typy danych, które chcesz monitorować:
+   - Dane synoptyczne (pogoda)
+   - Dane meteorologiczne (szczegółowa meteorologia)
+   - Dane hydrologiczne (rzeki)
+   - Ostrzeżenia meteorologiczne
+   - Ostrzeżenia hydrologiczne
+6. Dla ostrzeżeń możesz opcjonalnie włączyć filtrowanie po powiecie
+7. Potwierdź konfigurację
+
+### Tryb manualny
+
+1. Przejdź do **Ustawienia - Urządzenia i usługi - Dodaj integrację**
+2. Wyszukaj **IMGW-PIB Monitor**
+3. Wybierz **Manualny (wpisanie lokalizacji)**
+4. Wpisz nazwę miejscowości lub adres
+5. Wybierz odpowiednią lokalizację z listy podpowiedzi
+6. System znajdzie najbliższe stacje dla wszystkich typów danych
+7. Zaznacz typy danych, które chcesz monitorować
+8. Dla ostrzeżeń możesz opcjonalnie włączyć filtrowanie po powiecie
+9. Potwierdź konfigurację
+
+### Wiele instancji
+
+Możesz dodać integrację wielokrotnie dla różnych lokalizacji. Każda instancja działa niezależnie i może monitorować inne typy danych.
+
+## Opcje
+
+Po dodaniu integracji możesz zmienić interwał aktualizacji:
+
+1. Przejdź do **Ustawienia - Urządzenia i usługi**
+2. Znajdź wpis **IMGW-PIB Monitor**
+3. Kliknij **KONFIGURUJ**
+4. Ustaw nowy interwał aktualizacji (5-120 minut)
+
+Domyślne interwały:
+- Dane pomiarowe: 30 minut
+- Ostrzeżenia: 15 minut (ustawiane globalnie)
+
+## Jak działa globalny koordynator
+
+Integracja wykorzystuje dwustopniową architekturę koordynatorów:
+
+1. **Globalny koordynator** - pobiera wszystkie dane z API IMGW-PIB co 15 minut, niezależnie od liczby instancji integracji. Używa rate limiting (2 równoczesne zapytania z opóźnieniem 200ms) aby nie obciążać API.
+
+2. **Koordynatory instancji** - każda instancja integracji ma własny koordynator, który filtruje dane z globalnego koordynatora i przygotowuje je dla swoich sensorów. Aktualizacje odbywają się zgodnie z ustawionym interwałem.
+
+Korzyści:
+- Jedno zapytanie do API obsługuje wszystkie instancje integracji
+- Zmniejszone obciążenie API IMGW-PIB
+- Lepsza wydajność Home Assistant
+- Możliwość częstszych aktualizacji bez obawy o przeciążenie API
+
+## Kody TERYT
+
+Kody TERYT powiatów i ich nazwy są pobierane bezpośrednio z IMGW API Proxy podczas konfiguracji. Integracja nie zawiera lokalnej bazy kodów - dzięki temu zawsze korzysta z aktualnych danych, bez konieczności aktualizacji po zmianach administracyjnych.
+
+Kody TERYT są używane do:
+- Filtrowania ostrzeżeń meteorologicznych (API zwraca ostrzeżenia z kodami TERYT)
+- Filtrowania ostrzeżeń hydrologicznych (wyszukiwanie nazwy powiatu w opisie obszarów)
+- Automatycznego wykrywania powiatu na podstawie geokodowania
+
+Format kodu TERYT: `AABB` gdzie:
+- `AA` - kod województwa (02-32)
+- `BB` - kod powiatu (01-99)
+
+Przykłady:
+- `1201` - powiat bocheński (woj. małopolskie)
+- `1261` - m. Kraków (miasto na prawach powiatu)
+- `1465` - m. Warszawa
+
+## Współrzędne stacji
+
+### Stacje synoptyczne (SYNOP)
+
+API IMGW-PIB nie zwraca współrzędnych dla stacji synoptycznych. Integracja zawiera twardo zakodowaną bazę współrzędnych dla wszystkich 64 stacji synoptycznych w Polsce. Współrzędne są używane do:
+- Obliczania odległości do stacji
+- Automatycznego wyboru najbliższej stacji w trybie auto-discovery
+- Wyświetlania lokalizacji stacji w atrybutach sensorów
+
+### Stacje hydrologiczne i meteorologiczne
+
+Dla tych stacji współrzędne są pobierane bezpośrednio z API IMGW-PIB.
+
+## Automatyczne aktualizacje w trybie Auto-Discovery
+
+W trybie automatycznym integracja na bieżąco sprawdza, czy nie zmieniła się lokalizacja Home Assistant. Jeśli wykryje zmianę współrzędnych GPS, automatycznie aktualizuje wybrane stacje na najbliższe dostępne. Dzięki temu:
+- Integracja działa poprawnie po zmianie lokalizacji (np. przeniesienie instalacji)
+- Zawsze korzystasz z danych z najbliższych stacji
+- Nie musisz ręcznie rekonfigurować integracji
+
+Aktualizacja dotyczy tylko typów danych, które były włączone podczas konfiguracji.
+
+## Automatyczne wykrywanie regionu
+
+System automatycznie wykrywa województwo i powiat na podstawie:
+
+### W trybie automatycznym
+- Danych z IMGW API Proxy (reverse geocoding - współrzędne GPS -> najbliższa lokalizacja)
+- API zwraca nazwę województwa, powiatu i kod TERYT
+- Fallback: odległość do stolic województw jeśli API nie zwróci danych
+
+### W trybie manualnym
+- Danych z IMGW API Proxy (nazwa lokalizacji zawiera województwo, powiat, kod TERYT)
+- Kod TERYT powiatu i nazwa są pobierane bezpośrednio z API
+
+Wykryty region jest używany do:
+- Filtrowania ostrzeżeń meteorologicznych i hydrologicznych według kodu TERYT
+- Wyświetlania informacji w nazwach urządzeń
+- Automatycznej konfiguracji ostrzeżeń
+
+## Przykłady automatyzacji
+
+### Powiadomienie o nowym ostrzeżeniu meteo
+
+```yaml
+automation:
+  - alias: "Ostrzeżenie IMGW"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.imgw_auto_discovery_warnings_meteo_count
+        above: 0
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "Ostrzeżenie meteorologiczne"
+          message: >
+            {{ state_attr('sensor.imgw_auto_discovery_warnings_meteo_latest', 'event') }}
+            Stopień: {{ state_attr('sensor.imgw_auto_discovery_warnings_meteo_latest', 'level') }}
+            Ważne: {{ state_attr('sensor.imgw_auto_discovery_warnings_meteo_latest', 'valid_from') }} - {{ state_attr('sensor.imgw_auto_discovery_warnings_meteo_latest', 'valid_to') }}
+```
+
+### Alert mrozowy
+
+```yaml
+automation:
+  - alias: "Alert mrozowy"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.imgw_auto_discovery_temperature
+        below: -15
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "Silny mróz"
+          message: "Temperatura spadła do {{ states('sensor.imgw_auto_discovery_temperature') }}°C w {{ state_attr('sensor.imgw_auto_discovery_temperature', 'station_name') }}"
+```
+
+### Alert wysokiego stanu wody
+
+```yaml
+automation:
+  - alias: "Alert stan wody"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.imgw_auto_discovery_water_level
+        above: 500
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "Wysoki stan wody"
+          message: >
+            Stan wody w {{ state_attr('sensor.imgw_auto_discovery_water_level', 'river') }}
+            w {{ state_attr('sensor.imgw_auto_discovery_water_level', 'station_name') }}
+            wynosi {{ states('sensor.imgw_auto_discovery_water_level') }} cm
+```
+
+### Powiadomienie o silnym wietrze
+
+```yaml
+automation:
+  - alias: "Alert silny wiatr"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.imgw_auto_discovery_wind_speed
+        above: 15
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "Silny wiatr"
+          message: "Prędkość wiatru: {{ states('sensor.imgw_auto_discovery_wind_speed') }} m/s ({{ (states('sensor.imgw_auto_discovery_wind_speed') | float * 3.6) | round(0) }} km/h)"
+```
+
+### Dashboard z ostrzeżeniami i pogodą
+
+```yaml
+type: vertical-stack
+cards:
+  - type: entities
+    title: Ostrzeżenia IMGW
+    entities:
+      - entity: sensor.imgw_auto_discovery_warnings_meteo_count
+        name: Aktywne ostrzeżenia meteo
+      - entity: sensor.imgw_auto_discovery_warnings_meteo_max_level
+        name: Najwyższy stopień
+      - entity: sensor.imgw_auto_discovery_warnings_meteo_latest
+        name: Ostatnie ostrzeżenie
+      - entity: sensor.imgw_auto_discovery_warnings_hydro_count
+        name: Aktywne ostrzeżenia hydro
+  - type: weather-forecast
+    entity: weather.home
+  - type: entities
+    title: Dane IMGW
+    entities:
+      - entity: sensor.imgw_auto_discovery_temperature
+        name: Temperatura
+      - entity: sensor.imgw_auto_discovery_wind_speed
+        name: Wiatr
+      - entity: sensor.imgw_auto_discovery_humidity
+        name: Wilgotność
+      - entity: sensor.imgw_auto_discovery_pressure
+        name: Ciśnienie
+```
+
+## Limity API i optymalizacja
+
+API IMGW-PIB nie wymaga klucza i nie ma oficjalnych limitów, ale warto zachować rozsądek:
+
+- **Globalny koordynator** pobiera dane co 15 minut
+- **Rate limiting** - maksymalnie 2 równoczesne zapytania z opóźnieniem 200ms
+- **Cache** - wszystkie instancje używają tych samych danych
+- **Timeout** - timeout po 30 sekundach
+
+Zalecenia:
+- Nie ustawiaj interwału poniżej 5 minut
+- Dla wielu instancji używaj tego samego interwału
+- Dane z API są aktualizowane co godzinę, nie ma sensu odpytywać częściej niż co 15 minut
+
+## Rozwiązywanie problemów
+
+### Brak stacji w okolicy
+
+Jeśli system nie znajduje żadnych stacji w promieniu 50 km:
+- Sprawdź czy współrzędne GPS w Home Assistant są poprawne
+- Spróbuj trybu manualnego i wpisz najbliższą dużą miejscowość
+- Niektóre typy stacji (zwłaszcza hydrologiczne) nie są dostępne wszędzie
+
+### Niepoprawne dane
+
+Jeśli sensory pokazują `unavailable` lub `None`:
+- Sprawdź logi Home Assistant (`Ustawienia - System - Logi`)
+- Niektóre stacje nie raportują wszystkich parametrów
+- API IMGW-PIB czasami zwraca puste wartości
+
+### Ostrzeżenia nie są filtrowane po powiecie
+
+- Sprawdź czy powiat został wykryty (informacja w logach)
+- Dla ostrzeżeń hydro filtrowanie działa tylko jeśli nazwa powiatu występuje w opisie obszarów
+- Możesz wyłączyć filtrowanie po powiecie i zostawić samo województwo
+
+### Dane nie aktualizują się
+
+- Sprawdź interwał aktualizacji w opcjach integracji
+- Sprawdź czy globalny koordynator pobiera dane (logi)
+- Sprawdź połączenie internetowe Home Assistant
+
+## Źródło danych
+
+Dane pochodzą z publicznego API IMGW-PIB:
+- `https://danepubliczne.imgw.pl/api/data/synop`
+- `https://danepubliczne.imgw.pl/api/data/hydro`
+- `https://danepubliczne.imgw.pl/api/data/meteo`
+- `https://danepubliczne.imgw.pl/api/data/warningsmeteo`
+- `https://danepubliczne.imgw.pl/api/data/warningshydro`
+
+> Źródłem pochodzenia danych pomiarowych jest Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy.
+
+## Autor
+
+**Łukasz Kozik** - [lkozik@evilit.pl](mailto:lkozik@evilit.pl)
+
+## Podziękowania
+
+Dziękuję [Allon](https://github.com/AllonGit/) za pomoc w tworzeniu integracji.
+
+## Licencja
+
+[MIT](https://github.com/abnvle/ha-imgw-pib-monitor/blob/main/LICENSE)

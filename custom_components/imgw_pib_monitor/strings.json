@@ -1,0 +1,132 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "IMGW-PIB Monitor",
+        "description": "Choose how you want to set up the integration.",
+        "data": {
+          "setup_mode": "Setup Method"
+        }
+      },
+      "auto_options": {
+        "title": "Data Selection",
+        "description": "Choose which data types you want to add from the nearest stations.",
+        "data": {
+          "add_synop": "Add SYNOP weather data",
+          "add_meteo": "Add METEO weather data",
+          "add_hydro": "Add hydrological data (river levels)",
+          "enable_warnings_meteo": "Enable meteorological warnings",
+          "enable_warnings_hydro": "Enable hydrological warnings"
+        }
+      },
+      "manual_start": {
+        "title": "Manual Setup",
+        "description": "Enter the name of your city or town (e.g. Warszawa, Kraków, Gdańsk).",
+        "data": {
+          "location_name": "Location Name"
+        }
+      },
+      "manual_options": {
+        "title": "Data Selection",
+        "description": "Choose which data types you want to add from the nearest stations.",
+        "data": {
+          "add_synop": "Add SYNOP weather data",
+          "add_meteo": "Add METEO weather data",
+          "add_hydro": "Add hydrological data (river levels)",
+          "enable_warnings_meteo": "Enable meteorological warnings",
+          "enable_warnings_hydro": "Enable hydrological warnings"
+        }
+      },
+      "select": {
+        "title": "Select Location",
+        "description": "Select exactly one station from the results.",
+        "data": {
+          "station_id": "Station"
+        }
+      },
+      "options": {
+        "title": "Sensor Configuration",
+        "description": "Choose which sensor groups to add.",
+        "data": {
+          "weather": "Add Weather Sensors",
+          "river": "Add River Sensors",
+          "warnings": "Add Weather Alerts"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to IMGW.",
+      "no_stations": "No stations found for this name.",
+      "no_coordinates": "Home Assistant coordinates not set. Please configure your location in HA settings or use manual setup.",
+      "location_not_found": "Location not found. Please enter a valid city or town name in Poland.",
+      "no_stations_nearby": "No weather stations found near this location.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This location is already configured.",
+      "no_coordinates": "Home Assistant coordinates are not set.",
+      "cannot_connect": "Unable to connect to IMGW."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Settings",
+        "data": {
+          "update_interval": "Update interval (minutes)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "setup_mode": {
+      "options": {
+        "auto": "Automatic Setup (Use GPS location)",
+        "manual": "Manual Setup (Search by name)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "synop_temperature": { "name": "Temperature{station_suffix}" },
+      "synop_wind_speed": { "name": "Wind speed{station_suffix}" },
+      "synop_wind_direction": { "name": "Wind direction{station_suffix}" },
+      "synop_humidity": { "name": "Humidity{station_suffix}" },
+      "synop_precipitation": { "name": "Precipitation{station_suffix}" },
+      "synop_pressure": { "name": "Pressure{station_suffix}" },
+      "synop_station_id": { "name": "Synop station ID{station_suffix}" },
+      "synop_distance": { "name": "Synop station distance{station_suffix}" },
+      "hydro_water_level": { "name": "Water level{station_suffix}" },
+      "hydro_flow": { "name": "Water flow{station_suffix}" },
+      "hydro_water_temperature": { "name": "Water temperature{station_suffix}" },
+      "hydro_ice_phenomenon": { "name": "Ice phenomenon{station_suffix}" },
+      "hydro_station_id": { "name": "Hydro station ID{station_suffix}" },
+      "hydro_distance": { "name": "Hydro station distance{station_suffix}" },
+      "meteo_air_temperature": { "name": "Air temperature{station_suffix}" },
+      "meteo_ground_temperature": { "name": "Ground temperature{station_suffix}" },
+      "meteo_wind_avg_speed": { "name": "Average wind speed{station_suffix}" },
+      "meteo_wind_max_speed": { "name": "Maximum wind speed{station_suffix}" },
+      "meteo_wind_gust": { "name": "Wind gust{station_suffix}" },
+      "meteo_wind_direction": { "name": "Wind direction{station_suffix}" },
+      "meteo_humidity": { "name": "Humidity{station_suffix}" },
+      "meteo_precipitation_10min": { "name": "Precipitation{station_suffix}" },
+      "meteo_station_id": { "name": "Meteo station ID{station_suffix}" },
+      "meteo_distance": { "name": "Meteo station distance{station_suffix}" },
+      "warnings_meteo_count": { "name": "Active weather alerts{station_suffix}" },
+      "warnings_meteo_max_level": { "name": "Max alert level{station_suffix}" },
+      "warnings_meteo_latest": { "name": "Latest alert{station_suffix}" },
+      "warnings_meteo_details": { "name": "Alert details{station_suffix}" },
+      "warnings_hydro_count": { "name": "Active river alerts{station_suffix}" },
+      "warnings_hydro_max_level": { "name": "Max river alert level{station_suffix}" },
+      "warnings_hydro_latest": { "name": "Latest river alert{station_suffix}" },
+      "warnings_hydro_details": { "name": "River alert details{station_suffix}" },
+      "api_status": {
+        "name": "API Status",
+        "state": {
+          "online": "Online",
+          "offline": "Offline"
+        }
+      }
+    }
+  }
+}

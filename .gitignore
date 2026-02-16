@@ -1,0 +1,38 @@
+#VSCode
+.VSCodeCounter
+.vscode/
+
+#Home Assistant
+__pycache__
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Unit test / coverage
+.tox/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Type checking
+.mypy_cache/
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# JetBrains
+.idea/
+
+# Ruff
+.ruff_cache/

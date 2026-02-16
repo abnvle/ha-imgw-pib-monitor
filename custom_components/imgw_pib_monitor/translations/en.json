@@ -1,0 +1,143 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "IMGW-PIB Monitor",
+        "description": "Select the integration setup method.",
+        "data": {
+          "setup_mode": "Setup Mode"
+        }
+      },
+      "auto_options": {
+        "title": "Data Selection",
+        "description": "Choose which data types you want to add:",
+        "data": {
+          "add_synop": "Synoptic data",
+          "add_meteo": "Meteorological data",
+          "add_hydro": "Hydrological data",
+          "enable_warnings_meteo": "Enable meteorological warnings",
+          "enable_warnings_hydro": "Enable hydrological warnings",
+          "use_powiat_for_warnings": "Filter warnings for my county only"
+        }
+      },
+      "manual_start": {
+        "title": "Manual Setup",
+        "description": "Enter the name of your city or town",
+        "data": {
+          "location_name": "Location Name"
+        }
+      },
+      "manual_select_location": {
+        "title": "Select Location",
+        "description": "Multiple locations found. Please select the correct one:",
+        "data": {
+          "location_choice": "Location"
+        }
+      },
+      "manual_options": {
+        "title": "Data Selection",
+        "description": "Choose which data types you want to add:",
+        "data": {
+          "add_synop": "Synoptic data",
+          "add_meteo": "Meteorological data",
+          "add_hydro": "Hydrological data",
+          "enable_warnings_meteo": "Enable meteorological warnings",
+          "enable_warnings_hydro": "Enable hydrological warnings",
+          "use_powiat_for_warnings": "Filter warnings for my county only"
+        }
+      },
+      "select": {
+        "title": "Select Location",
+        "description": "Choose exactly one station from the results.",
+        "data": {
+          "station_id": "Station"
+        }
+      },
+      "options": {
+        "title": "Sensor Configuration",
+        "description": "Choose which sensor groups to add.",
+        "data": {
+          "weather": "Add weather sensors",
+          "river": "Add hydrological sensors",
+          "warnings": "Add weather warnings"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Connection error with IMGW.",
+      "no_stations": "No stations found with this name.",
+      "no_coordinates": "Home Assistant coordinates are not set. Configure your location in HA settings or use manual setup.",
+      "location_not_found": "Location not found. Please enter a valid city or town name in Poland.",
+      "no_stations_nearby": "No weather stations found near this location.",
+      "invalid_selection": "Invalid location selection.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "Location is already configured.",
+      "no_coordinates": "Home Assistant coordinates are not set.",
+      "cannot_connect": "Connection error with IMGW.",
+      "no_stations_nearby": "No IMGW stations found within 50km of your location."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Settings",
+        "data": {
+          "update_interval": "Update interval (minutes)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "setup_mode": {
+      "options": {
+        "auto": "Automatic Setup (Use GPS location)",
+        "manual": "Manual Setup (Search by name)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "synop_temperature": { "name": "Temperature{station_suffix}" },
+      "synop_wind_speed": { "name": "Wind speed{station_suffix}" },
+      "synop_wind_direction": { "name": "Wind direction{station_suffix}" },
+      "synop_humidity": { "name": "Humidity{station_suffix}" },
+      "synop_precipitation": { "name": "Precipitation{station_suffix}" },
+      "synop_pressure": { "name": "Pressure{station_suffix}" },
+      "synop_station_id": { "name": "Synop station ID{station_suffix}" },
+      "synop_distance": { "name": "Synop station distance{station_suffix}" },
+      "hydro_water_level": { "name": "Water level{station_suffix}" },
+      "hydro_flow": { "name": "Flow{station_suffix}" },
+      "hydro_water_temperature": { "name": "Water temperature{station_suffix}" },
+      "hydro_ice_phenomenon": { "name": "Ice phenomenon{station_suffix}" },
+      "hydro_station_id": { "name": "Hydro station ID{station_suffix}" },
+      "hydro_distance": { "name": "Hydro station distance{station_suffix}" },
+      "meteo_air_temperature": { "name": "Air temperature{station_suffix}" },
+      "meteo_ground_temperature": { "name": "Ground temperature{station_suffix}" },
+      "meteo_wind_avg_speed": { "name": "Average wind speed{station_suffix}" },
+      "meteo_wind_max_speed": { "name": "Maximum wind speed{station_suffix}" },
+      "meteo_wind_gust": { "name": "Wind gust{station_suffix}" },
+      "meteo_wind_direction": { "name": "Wind direction{station_suffix}" },
+      "meteo_humidity": { "name": "Humidity{station_suffix}" },
+      "meteo_precipitation_10min": { "name": "Precipitation{station_suffix}" },
+      "meteo_station_id": { "name": "Meteo station ID{station_suffix}" },
+      "meteo_distance": { "name": "Meteo station distance{station_suffix}" },
+      "warnings_meteo_count": { "name": "Active weather warnings{station_suffix}" },
+      "warnings_meteo_max_level": { "name": "Highest warning level{station_suffix}" },
+      "warnings_meteo_latest": { "name": "Latest warning{station_suffix}" },
+      "warnings_meteo_details": { "name": "Meteorological warning details{station_suffix}" },
+      "warnings_hydro_count": { "name": "Active hydrological warnings{station_suffix}" },
+      "warnings_hydro_max_level": { "name": "Highest hydrological warning level{station_suffix}" },
+      "warnings_hydro_latest": { "name": "Latest hydrological warning{station_suffix}" },
+      "warnings_hydro_details": { "name": "Hydrological warning details{station_suffix}" },
+      "api_status": {
+        "name": "API Status",
+        "state": {
+          "online": "Online",
+          "offline": "Offline"
+        }
+      }
+    }
+  }
+}
