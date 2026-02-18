@@ -9,6 +9,8 @@
 
 Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy). Dostarcza dane pogodowe, hydrologiczne i ostrzeżenia dla dowolnej lokalizacji w Polsce.
 
+[![Otwórz repozytorium w HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=abnvle&repository=ha-imgw-monitor&category=integration)
+
 ## Funkcje
 
 ### Podstawowe

@@ -17,7 +17,8 @@
           "add_hydro": "Hydrological data",
           "enable_warnings_meteo": "Enable meteorological warnings",
           "enable_warnings_hydro": "Enable hydrological warnings",
-          "use_powiat_for_warnings": "Filter warnings for my county only"
+          "use_powiat_for_warnings": "Filter warnings for my county only",
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
         }
       },
       "manual_start": {
@@ -43,7 +44,8 @@
           "add_hydro": "Hydrological data",
           "enable_warnings_meteo": "Enable meteorological warnings",
           "enable_warnings_hydro": "Enable hydrological warnings",
-          "use_powiat_for_warnings": "Filter warnings for my county only"
+          "use_powiat_for_warnings": "Filter warnings for my county only",
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
         }
       },
       "select": {
@@ -84,7 +86,8 @@
       "init": {
         "title": "Settings",
         "data": {
-          "update_interval": "Update interval (minutes)"
+          "update_interval": "Update interval (minutes)",
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
         }
       }
     }
@@ -126,11 +129,23 @@
       "warnings_meteo_count": { "name": "Active weather warnings{station_suffix}" },
       "warnings_meteo_max_level": { "name": "Highest warning level{station_suffix}" },
       "warnings_meteo_latest": { "name": "Latest warning{station_suffix}" },
-      "warnings_meteo_details": { "name": "Meteorological warning details{station_suffix}" },
+      "warnings_meteo_details": {
+        "name": "Meteorological warning details{station_suffix}",
+        "state": {
+          "details": "Details",
+          "no_warnings": "No warnings"
+        }
+      },
       "warnings_hydro_count": { "name": "Active hydrological warnings{station_suffix}" },
       "warnings_hydro_max_level": { "name": "Highest hydrological warning level{station_suffix}" },
       "warnings_hydro_latest": { "name": "Latest hydrological warning{station_suffix}" },
-      "warnings_hydro_details": { "name": "Hydrological warning details{station_suffix}" },
+      "warnings_hydro_details": {
+        "name": "Hydrological warning details{station_suffix}",
+        "state": {
+          "details": "Details",
+          "no_warnings": "No warnings"
+        }
+      },
       "api_status": {
         "name": "API Status",
         "state": {

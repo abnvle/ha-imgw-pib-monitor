@@ -171,5 +171,75 @@ SYNOP_STATIONS: Final[dict[str, tuple[float, float]]] = {
     "12695": (49.78, 22.77),  # Przemyśl
 }
 
-# Platforms
-PLATFORMS: Final = ["sensor"]
+# Forecast (weather entity) config
+CONF_ENABLE_WEATHER_FORECAST: Final = "enable_weather_forecast"
+CONF_FORECAST_LAT: Final = "forecast_lat"
+CONF_FORECAST_LON: Final = "forecast_lon"
+CONF_LOCATION_NAME: Final = "location_name"
+
+# Forecast API (IMGW Proxy)
+FORECAST_API_URL: Final = "https://imgw-api-proxy.evtlab.pl"
+FORECAST_UPDATE_INTERVAL: Final = 600  # 10 minutes, in seconds
+
+# Frontend
+FRONTEND_URL_BASE: Final = "/imgw-pib-monitor"
+
+# IMGW icon → HA condition mapping
+ICON_TO_CONDITION: Final = {
+    ("clear", "d"): "sunny",
+    ("clear", "n"): "clear-night",
+    ("partly", "d"): "partlycloudy",
+    ("partly", "n"): "partlycloudy",
+    ("cloudy", "d"): "cloudy",
+    ("cloudy", "n"): "cloudy",
+    ("rain_light", "d"): "rainy",
+    ("rain_light", "n"): "rainy",
+    ("rain_heavy", "d"): "pouring",
+    ("rain_heavy", "n"): "pouring",
+    ("snow", "d"): "snowy",
+    ("snow", "n"): "snowy",
+    ("sleet", "d"): "snowy-rainy",
+    ("sleet", "n"): "snowy-rainy",
+}
+
+
+def parse_imgw_icon(icon: str) -> str | None:
+    """Parse IMGW icon code to HA weather condition.
+
+    Format: n{cloud}z{precip}{d/n} e.g. n4z61d
+    """
+    if not icon or not isinstance(icon, str) or len(icon) < 6:
+        return None
+
+    try:
+        if icon[0] == "n" and icon[2] == "z":
+            cloud = int(icon[1])
+            precip = int(icon[3:5])
+            time_of_day = icon[-1] if icon[-1] in ("d", "n") else "d"
+        else:
+            return None
+    except (ValueError, IndexError):
+        return None
+
+    if precip >= 80:
+        precip_type = "rain_heavy"
+    elif 70 <= precip < 80:
+        precip_type = "snow"
+    elif 60 <= precip < 70:
+        precip_type = "rain_light"
+    elif precip > 0:
+        precip_type = "rain_light"
+    else:
+        precip_type = "none"
+
+    if precip_type != "none":
+        return ICON_TO_CONDITION.get((precip_type, time_of_day), "rainy")
+
+    if cloud <= 1:
+        key = ("clear", time_of_day)
+    elif cloud <= 5:
+        key = ("partly", time_of_day)
+    else:
+        key = ("cloudy", time_of_day)
+
+    return ICON_TO_CONDITION.get(key, "cloudy")

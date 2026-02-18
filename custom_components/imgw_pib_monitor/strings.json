@@ -16,7 +16,8 @@
           "add_meteo": "Add METEO weather data",
           "add_hydro": "Add hydrological data (river levels)",
           "enable_warnings_meteo": "Enable meteorological warnings",
-          "enable_warnings_hydro": "Enable hydrological warnings"
+          "enable_warnings_hydro": "Enable hydrological warnings",
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
         }
       },
       "manual_start": {
@@ -34,7 +35,8 @@
           "add_meteo": "Add METEO weather data",
           "add_hydro": "Add hydrological data (river levels)",
           "enable_warnings_meteo": "Enable meteorological warnings",
-          "enable_warnings_hydro": "Enable hydrological warnings"
+          "enable_warnings_hydro": "Enable hydrological warnings",
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
         }
       },
       "select": {
@@ -73,7 +75,8 @@
       "init": {
         "title": "Settings",
         "data": {
-          "update_interval": "Update interval (minutes)"
+          "update_interval": "Update interval (minutes)",
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
         }
       }
     }
@@ -115,11 +118,23 @@
       "warnings_meteo_count": { "name": "Active weather alerts{station_suffix}" },
       "warnings_meteo_max_level": { "name": "Max alert level{station_suffix}" },
       "warnings_meteo_latest": { "name": "Latest alert{station_suffix}" },
-      "warnings_meteo_details": { "name": "Alert details{station_suffix}" },
+      "warnings_meteo_details": {
+        "name": "Alert details{station_suffix}",
+        "state": {
+          "details": "Details",
+          "no_warnings": "No warnings"
+        }
+      },
       "warnings_hydro_count": { "name": "Active river alerts{station_suffix}" },
       "warnings_hydro_max_level": { "name": "Max river alert level{station_suffix}" },
       "warnings_hydro_latest": { "name": "Latest river alert{station_suffix}" },
-      "warnings_hydro_details": { "name": "River alert details{station_suffix}" },
+      "warnings_hydro_details": {
+        "name": "River alert details{station_suffix}",
+        "state": {
+          "details": "Details",
+          "no_warnings": "No warnings"
+        }
+      },
       "api_status": {
         "name": "API Status",
         "state": {

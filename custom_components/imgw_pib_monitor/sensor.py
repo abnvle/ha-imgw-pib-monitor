@@ -306,7 +306,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data.get("latest_warning", {}).get("event")
             if data.get("latest_warning")
-            else None
+            else "Brak"
         ),
         extra_attrs_fn=lambda data: (
             {
@@ -323,7 +323,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         key="warnings_meteo_details",
         translation_key="warnings_meteo_details",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data: "Details" if data.get("latest_warning") else None,
+        value_fn=lambda data: "details" if data.get("latest_warning") else "no_warnings",
         extra_attrs_fn=lambda data: (
             {
                 "content": data["latest_warning"]["content"],
@@ -359,7 +359,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
              if len(data.get("latest_warning", {}).get("description", "")) > 80
              else data.get("latest_warning", {}).get("description", ""))
             if data.get("latest_warning")
-            else None
+            else "Brak"
         ),
         extra_attrs_fn=lambda data: (
             {
@@ -376,7 +376,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         key="warnings_hydro_details",
         translation_key="warnings_hydro_details",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data: "Details" if data.get("latest_warning") else None,
+        value_fn=lambda data: "details" if data.get("latest_warning") else "no_warnings",
         extra_attrs_fn=lambda data: (
             {
                 "description": data["latest_warning"]["description"],
@@ -459,6 +459,7 @@ class ImgwSensorEntity(CoordinatorEntity[ImgwDataUpdateCoordinator], SensorEntit
     entity_description: ImgwSensorEntityDescription
     _attr_has_entity_name = True
     _attr_attribution = ATTRIBUTION
+    _attr_force_update = True
 
     def __init__(
         self,

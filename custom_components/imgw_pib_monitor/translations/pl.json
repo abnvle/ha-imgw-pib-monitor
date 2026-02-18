@@ -17,7 +17,8 @@
           "add_hydro": "Dane hydrologiczne",
           "enable_warnings_meteo": "Włącz ostrzeżenia meteorologiczne",
           "enable_warnings_hydro": "Włącz ostrzeżenia hydrologiczne",
-          "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu"
+          "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
+          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)"
         }
       },
       "manual_start": {
@@ -43,7 +44,8 @@
           "add_hydro": "Dane hydrologiczne",
           "enable_warnings_meteo": "Włącz ostrzeżenia meteorologiczne",
           "enable_warnings_hydro": "Włącz ostrzeżenia hydrologiczne",
-          "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu"
+          "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
+          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)"
         }
       },
       "select": {
@@ -84,7 +86,8 @@
       "init": {
         "title": "Ustawienia",
         "data": {
-          "update_interval": "Interwał aktualizacji (minuty)"
+          "update_interval": "Interwał aktualizacji (minuty)",
+          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)"
         }
       }
     }
@@ -126,11 +129,23 @@
       "warnings_meteo_count": { "name": "Aktywne ostrzeżenia pogodowe{station_suffix}" },
       "warnings_meteo_max_level": { "name": "Najwyższy stopień ostrzeżenia{station_suffix}" },
       "warnings_meteo_latest": { "name": "Ostatnie ostrzeżenie{station_suffix}" },
-      "warnings_meteo_details": { "name": "Szczegóły ostrzeżenia meteo{station_suffix}" },
+      "warnings_meteo_details": {
+        "name": "Szczegóły ostrzeżenia meteo{station_suffix}",
+        "state": {
+          "details": "Szczegóły",
+          "no_warnings": "Brak ostrzeżeń"
+        }
+      },
       "warnings_hydro_count": { "name": "Aktywne ostrzeżenia hydro{station_suffix}" },
       "warnings_hydro_max_level": { "name": "Najwyższy stopień ostrzeżenia hydro{station_suffix}" },
       "warnings_hydro_latest": { "name": "Ostatnie ostrzeżenie hydro{station_suffix}" },
-      "warnings_hydro_details": { "name": "Szczegóły ostrzeżenia hydro{station_suffix}" },
+      "warnings_hydro_details": {
+        "name": "Szczegóły ostrzeżenia hydro{station_suffix}",
+        "state": {
+          "details": "Szczegóły",
+          "no_warnings": "Brak ostrzeżeń"
+        }
+      },
       "api_status": {
         "name": "Status API",
         "state": {

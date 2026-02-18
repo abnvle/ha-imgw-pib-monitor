@@ -11,6 +11,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+import aiohttp
+
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
 from .api import ImgwApiClient
 from .const import (
     CONF_AUTO_DETECT,
@@ -30,6 +34,8 @@ from .const import (
     DATA_TYPE_WARNINGS_METEO,
     DEFAULT_MAX_DISTANCE,
     DOMAIN,
+    FORECAST_API_URL,
+    FORECAST_UPDATE_INTERVAL,
     SYNOP_STATIONS,
     VOIVODESHIP_CAPITALS,
     VOIVODESHIPS,
@@ -41,13 +47,14 @@ _LOGGER = logging.getLogger(__name__)
 class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Global coordinator to fetch all IMGW-PIB data with rate limiting."""
 
-    def __init__(self, hass: HomeAssistant, api: ImgwApiClient) -> None:
+    def __init__(self, hass: HomeAssistant, api: ImgwApiClient, update_interval_minutes: int | None = None) -> None:
         """Initialize the global coordinator."""
+        interval = timedelta(minutes=update_interval_minutes) if update_interval_minutes else timedelta(minutes=15)
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_global",
-            update_interval=timedelta(minutes=15),
+            update_interval=interval,
         )
         self.api = api
         self._semaphore = asyncio.Semaphore(2)
@@ -112,9 +119,12 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Prepare specific slice of data for this entry."""
-        if not self.global_coordinator.data:
-            await self.global_coordinator.async_config_entry_first_refresh()
-        
+        # Always refresh global data from IMGW API.
+        # The global coordinator has no entity listeners of its own, so its
+        # automatic scheduling never fires.  We must trigger it explicitly
+        # each time the entry coordinator's timer fires.
+        await self.global_coordinator.async_refresh()
+
         global_data = self.global_coordinator.data
         if not global_data:
             raise UpdateFailed("Global IMGW data is unavailable")
@@ -427,3 +437,43 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return int(v)
         except (ValueError, TypeError):
             return None
+
+
+class ImgwForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Fetch weather forecast data from IMGW API Proxy."""
+
+    def __init__(self, hass: HomeAssistant, lat: float, lon: float, update_interval_minutes: int | None = None) -> None:
+        """Initialize the forecast coordinator."""
+        if update_interval_minutes is not None:
+            interval = timedelta(minutes=update_interval_minutes)
+        else:
+            interval = timedelta(seconds=FORECAST_UPDATE_INTERVAL)
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_forecast",
+            update_interval=interval,
+        )
+        self.lat = lat
+        self.lon = lon
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch forecast data from IMGW API Proxy."""
+        url = f"{FORECAST_API_URL}/forecast?lat={self.lat}&lon={self.lon}"
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=15)
+            ) as resp:
+                if resp.status != 200:
+                    raise UpdateFailed(
+                        f"IMGW forecast API returned {resp.status}"
+                    )
+                data = await resp.json()
+                if "data" in data and isinstance(data["data"], dict):
+                    return data["data"]
+                return data
+        except aiohttp.ClientError as err:
+            raise UpdateFailed(
+                f"Error communicating with IMGW forecast API: {err}"
+            ) from err
