@@ -4,6 +4,9 @@
 [![GitHub Release](https://img.shields.io/github/v/release/abnvle/ha-imgw-pib-monitor)](https://github.com/abnvle/ha-imgw-pib-monitor/releases)
 [![Downloads](https://img.shields.io/github/downloads/abnvle/ha-imgw-pib-monitor/total)](https://github.com/abnvle/ha-imgw-pib-monitor/releases)
 [![License: MIT](https://img.shields.io/github/license/abnvle/ha-imgw-pib-monitor)](https://github.com/abnvle/ha-imgw-pib-monitor/blob/main/LICENSE)
+[![HACS Validation](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/hacs-validation.yml?label=HACS%20Validation)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/hacs-validation.yml)
+[![Hassfest](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/hassfest.yml?label=Hassfest)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/hassfest.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/tests.yml?label=Tests)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/tests.yml)
 
 [Wersja polska](README.md)
 
