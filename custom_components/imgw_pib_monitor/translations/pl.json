@@ -128,24 +128,20 @@
       "meteo_distance": { "name": "Odległość stacji meteo{station_suffix}" },
       "warnings_meteo_count": { "name": "Aktywne ostrzeżenia pogodowe{station_suffix}" },
       "warnings_meteo_max_level": { "name": "Najwyższy stopień ostrzeżenia{station_suffix}" },
-      "warnings_meteo_latest": { "name": "Ostatnie ostrzeżenie{station_suffix}" },
-      "warnings_meteo_details": {
-        "name": "Szczegóły ostrzeżenia meteo{station_suffix}",
-        "state": {
-          "details": "Szczegóły",
-          "no_warnings": "Brak ostrzeżeń"
-        }
-      },
+      "warnings_meteo_latest_event": { "name": "Zdarzenie meteorologiczne{station_suffix}" },
+      "warnings_meteo_latest_level": { "name": "Stopień ostrzeżenia{station_suffix}" },
+      "warnings_meteo_latest_probability": { "name": "Prawdopodobieństwo ostrzeżenia meteo{station_suffix}" },
+      "warnings_meteo_latest_valid_from": { "name": "Ostrzeżenie obowiązuje od{station_suffix}" },
+      "warnings_meteo_latest_valid_to": { "name": "Ostrzeżenie obowiązuje do{station_suffix}" },
+      "warnings_meteo_latest_content": { "name": "Treść ostrzeżenia{station_suffix}" },
       "warnings_hydro_count": { "name": "Aktywne ostrzeżenia hydro{station_suffix}" },
       "warnings_hydro_max_level": { "name": "Najwyższy stopień ostrzeżenia hydro{station_suffix}" },
-      "warnings_hydro_latest": { "name": "Ostatnie ostrzeżenie hydro{station_suffix}" },
-      "warnings_hydro_details": {
-        "name": "Szczegóły ostrzeżenia hydro{station_suffix}",
-        "state": {
-          "details": "Szczegóły",
-          "no_warnings": "Brak ostrzeżeń"
-        }
-      },
+      "warnings_hydro_latest_event": { "name": "Zdarzenie hydrologiczne{station_suffix}" },
+      "warnings_hydro_latest_level": { "name": "Stopień ostrzeżenia hydro{station_suffix}" },
+      "warnings_hydro_latest_probability": { "name": "Prawdopodobieństwo ostrzeżenia hydro{station_suffix}" },
+      "warnings_hydro_latest_valid_from": { "name": "Ostrzeżenie hydro obowiązuje od{station_suffix}" },
+      "warnings_hydro_latest_valid_to": { "name": "Ostrzeżenie hydro obowiązuje do{station_suffix}" },
+      "warnings_hydro_latest_description": { "name": "Opis ostrzeżenia hydro{station_suffix}" },
       "api_status": {
         "name": "Status API",
         "state": {

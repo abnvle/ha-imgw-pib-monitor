@@ -141,7 +141,6 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             DATA_TYPE_METEO: {},
             DATA_TYPE_WARNINGS_METEO: {},
             DATA_TYPE_WARNINGS_HYDRO: {},
-            "auto": {},
         }
 
         # 1. Synop
@@ -158,8 +157,6 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         parsed["latitude"] = s_lat
                         parsed["longitude"] = s_lon
                     result[DATA_TYPE_SYNOP][sid] = parsed
-                    if self.config_data.get(CONF_AUTO_DETECT):
-                        result["auto"][DATA_TYPE_SYNOP] = parsed
                     break
 
         # 2. Hydro
@@ -170,8 +167,6 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if ha_lat and ha_lon and parsed.get("latitude") and parsed.get("longitude"):
                         parsed["distance"] = round(haversine(ha_lat, ha_lon, parsed["latitude"], parsed["longitude"]), 1)
                     result[DATA_TYPE_HYDRO][sid] = parsed
-                    if self.config_data.get(CONF_AUTO_DETECT):
-                        result["auto"][DATA_TYPE_HYDRO] = parsed
                     break
 
         # 3. Meteo
@@ -182,8 +177,6 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if ha_lat and ha_lon and parsed.get("latitude") and parsed.get("longitude"):
                         parsed["distance"] = round(haversine(ha_lat, ha_lon, parsed["latitude"], parsed["longitude"]), 1)
                     result[DATA_TYPE_METEO][sid] = parsed
-                    if self.config_data.get(CONF_AUTO_DETECT):
-                        result["auto"][DATA_TYPE_METEO] = parsed
                     break
 
         # 4. Warnings Meteo
@@ -399,7 +392,7 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "number": w.get("numer"),
                 "event": w.get("zdarzenie"),
                 "level": lvl,
-                "probability": w.get("prawdopodobienstwo"),
+                "probability": int(w.get("prawdopodobienstwo", 0)),
                 "valid_from": w.get("data_od"),
                 "valid_to": w.get("data_do"),
                 "description": w.get("przebieg"),

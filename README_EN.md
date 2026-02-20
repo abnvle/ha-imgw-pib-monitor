@@ -9,7 +9,7 @@
 
 Home Assistant integration using public data from IMGW-PIB (Institute of Meteorology and Water Management - National Research Institute). Provides weather, hydrological, and warning data for any location in Poland.
 
-[![Open repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=abnvle&repository=ha-imgw-monitor&category=integration)
+[![Open repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=abnvle&repository=ha-imgw-pib-monitor&category=integration)
 
 ## Features
 

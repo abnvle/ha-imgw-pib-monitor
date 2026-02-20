@@ -29,30 +29,6 @@ from .coordinator import (
 _LOGGER = logging.getLogger(__name__)
 
 
-async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Register frontend resources (only once, only when needed)."""
-    if hass.data.get(DOMAIN, {}).get("_frontend_registered"):
-        return
-
-    from .frontend import JSModuleRegistration
-
-    module_register = JSModuleRegistration(hass)
-    await module_register.async_register()
-    hass.data.setdefault(DOMAIN, {})["_frontend_registered"] = True
-    _LOGGER.debug("IMGW Weather frontend registered")
-
-
-async def _async_unregister_frontend(hass: HomeAssistant) -> None:
-    """Remove frontend resources when no forecast entries remain."""
-    from .frontend import JSModuleRegistration
-
-    module_register = JSModuleRegistration(hass)
-    await module_register.async_unregister()
-    hass.data.get(DOMAIN, {}).pop("_frontend_registered", None)
-    _LOGGER.debug("IMGW Weather frontend unregistered")
-
-
-
 def _async_cleanup_forecast(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove forecast entity and device from registries when forecast is disabled."""
     ent_reg = er.async_get(hass)
@@ -126,9 +102,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Forecast disabled — clean up leftover entity/device from registry
         _async_cleanup_forecast(hass, entry)
 
-    # Register frontend resources (always, so the card is available)
-    await _async_register_frontend(hass)
-
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -170,13 +143,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_forecast", None)
-
-        # Unregister frontend if no other entries remain
-        remaining = [
-            e for e in hass.config_entries.async_entries(DOMAIN)
-            if e.entry_id != entry.entry_id
-        ]
-        if not remaining:
-            await _async_unregister_frontend(hass)
 
     return unload_ok

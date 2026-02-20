@@ -3,18 +3,18 @@
     "step": {
       "user": {
         "title": "IMGW-PIB Monitor",
-        "description": "Select the integration setup method.",
+        "description": "Choose how you want to set up the integration.",
         "data": {
-          "setup_mode": "Setup Mode"
+          "setup_mode": "Setup Method"
         }
       },
       "auto_options": {
         "title": "Data Selection",
-        "description": "Choose which data types you want to add:",
+        "description": "Choose which data types you want to add from the nearest stations.",
         "data": {
-          "add_synop": "Synoptic data",
-          "add_meteo": "Meteorological data",
-          "add_hydro": "Hydrological data",
+          "add_synop": "Add SYNOP weather data",
+          "add_meteo": "Add METEO weather data",
+          "add_hydro": "Add hydrological data (river levels)",
           "enable_warnings_meteo": "Enable meteorological warnings",
           "enable_warnings_hydro": "Enable hydrological warnings",
           "use_powiat_for_warnings": "Filter warnings for my county only",
@@ -23,7 +23,7 @@
       },
       "manual_start": {
         "title": "Manual Setup",
-        "description": "Enter the name of your city or town",
+        "description": "Enter the name of your city or town (e.g. Warszawa, Kraków, Gdańsk).",
         "data": {
           "location_name": "Location Name"
         }
@@ -37,11 +37,11 @@
       },
       "manual_options": {
         "title": "Data Selection",
-        "description": "Choose which data types you want to add:",
+        "description": "Choose which data types you want to add from the nearest stations.",
         "data": {
-          "add_synop": "Synoptic data",
-          "add_meteo": "Meteorological data",
-          "add_hydro": "Hydrological data",
+          "add_synop": "Add SYNOP weather data",
+          "add_meteo": "Add METEO weather data",
+          "add_hydro": "Add hydrological data (river levels)",
           "enable_warnings_meteo": "Enable meteorological warnings",
           "enable_warnings_hydro": "Enable hydrological warnings",
           "use_powiat_for_warnings": "Filter warnings for my county only",
@@ -50,7 +50,7 @@
       },
       "select": {
         "title": "Select Location",
-        "description": "Choose exactly one station from the results.",
+        "description": "Select exactly one station from the results.",
         "data": {
           "station_id": "Station"
         }
@@ -59,25 +59,25 @@
         "title": "Sensor Configuration",
         "description": "Choose which sensor groups to add.",
         "data": {
-          "weather": "Add weather sensors",
-          "river": "Add hydrological sensors",
-          "warnings": "Add weather warnings"
+          "weather": "Add Weather Sensors",
+          "river": "Add River Sensors",
+          "warnings": "Add Weather Alerts"
         }
       }
     },
     "error": {
-      "cannot_connect": "Connection error with IMGW.",
-      "no_stations": "No stations found with this name.",
-      "no_coordinates": "Home Assistant coordinates are not set. Configure your location in HA settings or use manual setup.",
+      "cannot_connect": "Unable to connect to IMGW.",
+      "no_stations": "No stations found for this name.",
+      "no_coordinates": "Home Assistant coordinates not set. Please configure your location in HA settings or use manual setup.",
       "location_not_found": "Location not found. Please enter a valid city or town name in Poland.",
       "no_stations_nearby": "No weather stations found near this location.",
       "invalid_selection": "Invalid location selection.",
       "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "Location is already configured.",
+      "already_configured": "This location is already configured.",
       "no_coordinates": "Home Assistant coordinates are not set.",
-      "cannot_connect": "Connection error with IMGW.",
+      "cannot_connect": "Unable to connect to IMGW.",
       "no_stations_nearby": "No IMGW stations found within 50km of your location."
     }
   },
@@ -111,7 +111,7 @@
       "synop_station_id": { "name": "Synop station ID{station_suffix}" },
       "synop_distance": { "name": "Synop station distance{station_suffix}" },
       "hydro_water_level": { "name": "Water level{station_suffix}" },
-      "hydro_flow": { "name": "Flow{station_suffix}" },
+      "hydro_flow": { "name": "Water flow{station_suffix}" },
       "hydro_water_temperature": { "name": "Water temperature{station_suffix}" },
       "hydro_ice_phenomenon": { "name": "Ice phenomenon{station_suffix}" },
       "hydro_station_id": { "name": "Hydro station ID{station_suffix}" },
@@ -126,26 +126,22 @@
       "meteo_precipitation_10min": { "name": "Precipitation{station_suffix}" },
       "meteo_station_id": { "name": "Meteo station ID{station_suffix}" },
       "meteo_distance": { "name": "Meteo station distance{station_suffix}" },
-      "warnings_meteo_count": { "name": "Active weather warnings{station_suffix}" },
-      "warnings_meteo_max_level": { "name": "Highest warning level{station_suffix}" },
-      "warnings_meteo_latest": { "name": "Latest warning{station_suffix}" },
-      "warnings_meteo_details": {
-        "name": "Meteorological warning details{station_suffix}",
-        "state": {
-          "details": "Details",
-          "no_warnings": "No warnings"
-        }
-      },
-      "warnings_hydro_count": { "name": "Active hydrological warnings{station_suffix}" },
-      "warnings_hydro_max_level": { "name": "Highest hydrological warning level{station_suffix}" },
-      "warnings_hydro_latest": { "name": "Latest hydrological warning{station_suffix}" },
-      "warnings_hydro_details": {
-        "name": "Hydrological warning details{station_suffix}",
-        "state": {
-          "details": "Details",
-          "no_warnings": "No warnings"
-        }
-      },
+      "warnings_meteo_count": { "name": "Active weather alerts{station_suffix}" },
+      "warnings_meteo_max_level": { "name": "Max alert level{station_suffix}" },
+      "warnings_meteo_latest_event": { "name": "Meteorological event{station_suffix}" },
+      "warnings_meteo_latest_level": { "name": "Alert level{station_suffix}" },
+      "warnings_meteo_latest_probability": { "name": "Meteorological alert probability{station_suffix}" },
+      "warnings_meteo_latest_valid_from": { "name": "Alert valid from{station_suffix}" },
+      "warnings_meteo_latest_valid_to": { "name": "Alert valid to{station_suffix}" },
+      "warnings_meteo_latest_content": { "name": "Alert content{station_suffix}" },
+      "warnings_hydro_count": { "name": "Active river alerts{station_suffix}" },
+      "warnings_hydro_max_level": { "name": "Max hydrological alert level{station_suffix}" },
+      "warnings_hydro_latest_event": { "name": "Hydrological event{station_suffix}" },
+      "warnings_hydro_latest_level": { "name": "Hydrological alert level{station_suffix}" },
+      "warnings_hydro_latest_probability": { "name": "Hydrological alert probability{station_suffix}" },
+      "warnings_hydro_latest_valid_from": { "name": "Hydrological alert valid from{station_suffix}" },
+      "warnings_hydro_latest_valid_to": { "name": "Hydrological alert valid to{station_suffix}" },
+      "warnings_hydro_latest_description": { "name": "Hydrological alert description{station_suffix}" },
       "api_status": {
         "name": "API Status",
         "state": {

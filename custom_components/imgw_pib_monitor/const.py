@@ -181,9 +181,6 @@ CONF_LOCATION_NAME: Final = "location_name"
 FORECAST_API_URL: Final = "https://imgw-api-proxy.evtlab.pl"
 FORECAST_UPDATE_INTERVAL: Final = 600  # 10 minutes, in seconds
 
-# Frontend
-FRONTEND_URL_BASE: Final = "/imgw-pib-monitor"
-
 # IMGW icon → HA condition mapping
 ICON_TO_CONDITION: Final = {
     ("clear", "d"): "sunny",

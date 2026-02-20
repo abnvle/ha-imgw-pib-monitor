@@ -3,7 +3,7 @@
   "name": "IMGW-PIB Monitor",
   "codeowners": ["@abnvle"],
   "config_flow": true,
-  "dependencies": ["frontend", "http"],
+  "dependencies": [],
   "documentation": "https://github.com/abnvle/ha-imgw-pib-monitor",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/abnvle/ha-imgw-pib-monitor/issues",
