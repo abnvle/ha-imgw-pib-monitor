@@ -38,9 +38,40 @@ Home Assistant integration using public data from IMGW-PIB (Institute of Meteoro
 
 ## Screenshots
 
-| Integration entries | Meteo warnings | Meteorological data |
-|:---:|:---:|:---:|
-| ![Integrations](docs/integrations.png) | ![Warnings](docs/warnings.png) | ![Meteo](docs/meteo.png) |
+### Integration entries
+Each location creates separate devices — measurement stations, warnings and weather forecast.
+
+![Integration entries](docs/integration_entries.png)
+
+---
+
+<table>
+<tr>
+<td width="50%">
+
+### Weather forecast
+Weather entity with current conditions, daily and hourly forecast.
+
+![Weather forecast](docs/weather_forecast.png)
+
+</td>
+<td width="50%">
+
+### Meteorological warnings
+8 sensors per warning type — from active count to full warning text.
+
+![Meteo warnings](docs/meteo_warnings.png)
+
+</td>
+</tr>
+</table>
+
+---
+
+### Hydrological data
+Measurement sensors (water level, flow, ice phenomenon) and diagnostic sensors (station ID, distance).
+
+![Hydrological data](docs/hydro_data.png)
 
 ## Configuration modes
 

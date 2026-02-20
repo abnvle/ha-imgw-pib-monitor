@@ -38,9 +38,40 @@ Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Mete
 
 ## Zrzuty ekranu
 
-| Wpisy integracji | Ostrzeżenia meteo | Dane meteorologiczne |
-|:---:|:---:|:---:|
-| ![Integracje](docs/integrations.png) | ![Ostrzeżenia](docs/warnings.png) | ![Meteo](docs/meteo.png) |
+### Wpisy integracji
+Każda lokalizacja tworzy osobne urządzenia — stacje pomiarowe, ostrzeżenia i prognozę pogody.
+
+![Wpisy integracji](docs/integration_entries.png)
+
+---
+
+<table>
+<tr>
+<td width="50%">
+
+### Prognoza pogody
+Encja weather z aktualną pogodą, prognozą dzienną i godzinową.
+
+![Prognoza pogody](docs/weather_forecast.png)
+
+</td>
+<td width="50%">
+
+### Ostrzeżenia meteorologiczne
+8 sensorów dla każdego typu ostrzeżeń — od liczby aktywnych po pełną treść.
+
+![Ostrzeżenia meteo](docs/meteo_warnings.png)
+
+</td>
+</tr>
+</table>
+
+---
+
+### Dane hydrologiczne
+Sensory pomiarowe (poziom wody, przepływ, zjawisko lodowe) i diagnostyczne (ID stacji, odległość).
+
+![Dane hydrologiczne](docs/hydro_data.png)
 
 ## Tryby konfiguracji
 
