@@ -18,7 +18,8 @@ Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Mete
 - **Dwa tryby konfiguracji** - automatyczny (GPS) lub manualny (wpisanie lokalizacji)
 - **Config Flow UI** - konfiguracja przez interfejs, zero YAML
 - **5 źródeł danych** - synoptyczne, hydrologiczne, meteorologiczne, ostrzeżenia meteo, ostrzeżenia hydro
-- **32 sensory** - temperatura, wiatr, wilgotność, ciśnienie, stan wody, przepływ i inne
+- **Do 40 sensorów** - temperatura, wiatr, wilgotność, ciśnienie, stan wody, przepływ, ostrzeżenia i inne
+- **Encja pogodowa** - prognoza pogody (dzienna i godzinowa) z IMGW-PIB jako encja weather
 - **Wiele instancji** - możliwość dodania integracji wielokrotnie dla różnych lokalizacji
 - **Tłumaczenia PL/EN**
 - **Bez klucza API** - dane z publicznego API IMGW-PIB
@@ -31,8 +32,9 @@ Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Mete
 - **Automatyczne wykrywanie województwa i powiatu** - system sam rozpoznaje region na podstawie współrzędnych
 - **Obliczanie odległości** - każdy sensor pokazuje odległość do stacji pomiarowej
 - **Globalny koordynator** - centralne pobieranie danych z rate limiting, oszczędność zapytań do API
-- **Options Flow** - zmiana interwału aktualizacji w dowolnym momencie (5-120 minut)
+- **Options Flow** - zmiana interwału aktualizacji i włączanie/wyłączanie prognozy pogody w dowolnym momencie (5-120 minut)
 - **Współrzędne geograficzne** - wszystkie sensory zawierają współrzędne stacji w atrybutach
+- **Prognoza pogody** - opcjonalna encja pogodowa z prognozą dzienną i godzinową (dane z IMGW API Proxy)
 
 ## Zrzuty ekranu
 
@@ -111,37 +113,65 @@ Atrybuty: nazwa stacji, ID stacji, nazwa rzeki, województwo, współrzędne geo
 
 Atrybuty: nazwa stacji, kod stacji, współrzędne geograficzne, odległość
 
-### Ostrzeżenia meteorologiczne (4 sensory)
+### Ostrzeżenia meteorologiczne (8 sensorów)
 
 | Sensor | Opis | Typ |
 |---|---|---|
 | Liczba aktywnych ostrzeżeń | Ilość bieżących ostrzeżeń | Pomiar |
-| Najwyższy stopień ostrzeżenia | Najwyższy aktywny poziom (1-3) | Pomiar |
-| Ostatnie ostrzeżenie | Najpoważniejsze ostrzeżenie | Informacyjny |
-| Szczegóły ostrzeżenia | Treść i komentarz ostrzeżenia | Diagnostyczny |
+| Najwyższy stopień ostrzeżenia | Najwyższy aktywny poziom (1-3) | - |
+| Nazwa ostatniego zdarzenia | Nazwa najpoważniejszego ostrzeżenia | - |
+| Stopień ostatniego ostrzeżenia | Poziom najpoważniejszego ostrzeżenia | - |
+| Prawdopodobieństwo | Prawdopodobieństwo ostatniego ostrzeżenia (%) | - |
+| Ważne od | Data początku ważności ostatniego ostrzeżenia | - |
+| Ważne do | Data końca ważności ostatniego ostrzeżenia | - |
+| Treść ostrzeżenia | Treść ostatniego ostrzeżenia (max 255 znaków) | - |
 
-Atrybuty dla "Ostatnie ostrzeżenie": nazwa zdarzenia, stopień, prawdopodobieństwo, ważność od-do
-Atrybuty dla "Szczegóły": pełna treść ostrzeżenia, komentarz
+Sensor "Liczba aktywnych ostrzeżeń" zawiera w atrybucie `warnings` pełną listę wszystkich aktywnych ostrzeżeń.
 
 Ostrzeżenia można filtrować według:
 - Województwa (16 województw)
 - Powiatu (dokładniejsze filtrowanie) - opcjonalne
 
-### Ostrzeżenia hydrologiczne (4 sensory)
+### Ostrzeżenia hydrologiczne (8 sensorów)
 
 | Sensor | Opis | Typ |
 |---|---|---|
 | Liczba aktywnych ostrzeżeń | Ilość bieżących ostrzeżeń hydro | Pomiar |
-| Najwyższy stopień ostrzeżenia hydro | Najwyższy aktywny poziom | Pomiar |
-| Ostatnie ostrzeżenie hydro | Najpoważniejsze ostrzeżenie hydro | Informacyjny |
-| Szczegóły ostrzeżenia hydro | Opis i obszary zagrożone | Diagnostyczny |
+| Najwyższy stopień ostrzeżenia hydro | Najwyższy aktywny poziom | - |
+| Nazwa ostatniego zdarzenia hydro | Nazwa/opis najpoważniejszego ostrzeżenia | - |
+| Stopień ostatniego ostrzeżenia hydro | Poziom najpoważniejszego ostrzeżenia | - |
+| Prawdopodobieństwo hydro | Prawdopodobieństwo ostatniego ostrzeżenia (%) | - |
+| Ważne od hydro | Data początku ważności | - |
+| Ważne do hydro | Data końca ważności | - |
+| Opis ostrzeżenia hydro | Opis przebiegu ostrzeżenia (max 255 znaków) | - |
 
-Atrybuty dla "Ostatnie ostrzeżenie": numer, zdarzenie, stopień, prawdopodobieństwo, ważność od-do
-Atrybuty dla "Szczegóły": pełny opis przebiegu, lista obszarów
+Sensor "Liczba aktywnych ostrzeżeń" zawiera w atrybucie `warnings` pełną listę wszystkich aktywnych ostrzeżeń hydrologicznych.
 
 Ostrzeżenia można filtrować według:
 - Województwa (16 województw)
 - Powiatu (wyszukiwanie w opisie obszarów) - opcjonalne
+
+### Prognoza pogody (encja weather)
+
+Opcjonalna encja pogodowa `weather.*` z danymi z IMGW API Proxy. Obsługuje:
+
+| Właściwość | Opis |
+|---|---|
+| Warunki pogodowe | Na podstawie ikony IMGW (słonecznie, pochmurno, deszcz itp.) |
+| Temperatura | Bieżąca temperatura powietrza (°C) |
+| Temperatura odczuwalna | Temperatura odczuwalna (°C) |
+| Wilgotność | Wilgotność powietrza (%) |
+| Ciśnienie | Ciśnienie atmosferyczne (hPa) |
+| Prędkość wiatru | Prędkość wiatru (m/s) |
+| Porywy wiatru | Prędkość porywów wiatru (m/s) |
+| Kierunek wiatru | Kierunek wiatru (°) |
+| Zachmurzenie | Stopień zachmurzenia (%) |
+
+Dodatkowe atrybuty: opady, opady śniegu, wschód/zachód słońca, ikona IMGW, model prognozy.
+
+Prognozy:
+- **Dzienna** - temperatura max/min, wiatr, opady (grupowanie dzień/noc)
+- **Godzinowa** - pełne dane pogodowe na każdą godzinę
 
 ## Instalacja
 
@@ -174,7 +204,8 @@ Ostrzeżenia można filtrować według:
    - Ostrzeżenia meteorologiczne
    - Ostrzeżenia hydrologiczne
 6. Dla ostrzeżeń możesz opcjonalnie włączyć filtrowanie po powiecie
-7. Potwierdź konfigurację
+7. Opcjonalnie włącz prognozę pogody (encja weather)
+8. Potwierdź konfigurację
 
 ### Tryb manualny
 
@@ -186,7 +217,8 @@ Ostrzeżenia można filtrować według:
 6. System znajdzie najbliższe stacje dla wszystkich typów danych
 7. Zaznacz typy danych, które chcesz monitorować
 8. Dla ostrzeżeń możesz opcjonalnie włączyć filtrowanie po powiecie
-9. Potwierdź konfigurację
+9. Opcjonalnie włącz prognozę pogody (encja weather)
+10. Potwierdź konfigurację
 
 ### Wiele instancji
 
@@ -194,24 +226,25 @@ Możesz dodać integrację wielokrotnie dla różnych lokalizacji. Każda instan
 
 ## Opcje
 
-Po dodaniu integracji możesz zmienić interwał aktualizacji:
+Po dodaniu integracji możesz zmienić ustawienia:
 
 1. Przejdź do **Ustawienia - Urządzenia i usługi**
 2. Znajdź wpis **IMGW-PIB Monitor**
 3. Kliknij **KONFIGURUJ**
 4. Ustaw nowy interwał aktualizacji (5-120 minut)
+5. Włącz lub wyłącz prognozę pogody (encja weather)
 
-Domyślne interwały:
-- Dane pomiarowe: 30 minut
-- Ostrzeżenia: 15 minut (ustawiane globalnie)
+Domyślny interwał aktualizacji: 30 minut. Globalny koordynator synchronizuje się z najkrótszym interwałem spośród wszystkich instancji.
 
 ## Jak działa globalny koordynator
 
 Integracja wykorzystuje dwustopniową architekturę koordynatorów:
 
-1. **Globalny koordynator** - pobiera wszystkie dane z API IMGW-PIB co 15 minut, niezależnie od liczby instancji integracji. Używa rate limiting (2 równoczesne zapytania z opóźnieniem 200ms) aby nie obciążać API.
+1. **Globalny koordynator** - pobiera wszystkie dane z API IMGW-PIB. Interwał jest synchronizowany z najkrótszym interwałem spośród wszystkich instancji integracji. Używa rate limiting (2 równoczesne zapytania z opóźnieniem 200ms) aby nie obciążać API.
 
 2. **Koordynatory instancji** - każda instancja integracji ma własny koordynator, który filtruje dane z globalnego koordynatora i przygotowuje je dla swoich sensorów. Aktualizacje odbywają się zgodnie z ustawionym interwałem.
+
+3. **Koordynator prognozy** (opcjonalny) - osobny koordynator pobierający prognozę pogody z IMGW API Proxy dla encji weather.
 
 Korzyści:
 - Jedno zapytanie do API obsługuje wszystkie instancje integracji
@@ -384,7 +417,7 @@ cards:
 
 API IMGW-PIB nie wymaga klucza i nie ma oficjalnych limitów, ale warto zachować rozsądek:
 
-- **Globalny koordynator** pobiera dane co 15 minut
+- **Globalny koordynator** pobiera dane zgodnie z najkrótszym interwałem instancji (domyślnie 30 minut)
 - **Rate limiting** - maksymalnie 2 równoczesne zapytania z opóźnieniem 200ms
 - **Cache** - wszystkie instancje używają tych samych danych
 - **Timeout** - timeout po 30 sekundach
@@ -430,6 +463,9 @@ Dane pochodzą z publicznego API IMGW-PIB:
 - `https://danepubliczne.imgw.pl/api/data/meteo`
 - `https://danepubliczne.imgw.pl/api/data/warningsmeteo`
 - `https://danepubliczne.imgw.pl/api/data/warningshydro`
+
+Prognoza pogody:
+- `https://imgw-api-proxy.evtlab.pl/forecast`
 
 > Źródłem pochodzenia danych pomiarowych jest Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy.
 

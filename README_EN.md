@@ -18,7 +18,8 @@ Home Assistant integration using public data from IMGW-PIB (Institute of Meteoro
 - **Two configuration modes** - automatic (GPS) or manual (enter location)
 - **Config Flow UI** - configuration through interface, zero YAML
 - **5 data sources** - synoptic, hydrological, meteorological, meteo warnings, hydro warnings
-- **32 sensors** - temperature, wind, humidity, pressure, water level, flow and more
+- **Up to 40 sensors** - temperature, wind, humidity, pressure, water level, flow, warnings and more
+- **Weather entity** - weather forecast (daily and hourly) from IMGW-PIB as a weather entity
 - **Multiple instances** - add integration multiple times for different locations
 - **Polish & English translations**
 - **No API key required** - data from public IMGW-PIB API
@@ -31,8 +32,9 @@ Home Assistant integration using public data from IMGW-PIB (Institute of Meteoro
 - **Automatic region detection** - system recognizes region based on coordinates
 - **Distance calculation** - each sensor shows distance to measurement station
 - **Global coordinator** - centralized data fetching with rate limiting, saves API requests
-- **Options Flow** - change update interval at any time (5-120 minutes)
+- **Options Flow** - change update interval and toggle weather forecast at any time (5-120 minutes)
 - **Geographic coordinates** - all sensors contain station coordinates in attributes
+- **Weather forecast** - optional weather entity with daily and hourly forecast (data from IMGW API Proxy)
 
 ## Screenshots
 
@@ -111,37 +113,65 @@ Attributes: station name, station ID, river name, voivodeship, geographic coordi
 
 Attributes: station name, station code, geographic coordinates, distance
 
-### Meteorological warnings (4 sensors)
+### Meteorological warnings (8 sensors)
 
 | Sensor | Description | Type |
 |---|---|---|
 | Active warnings count | Number of current warnings | Measurement |
-| Max warning level | Highest active level (1-3) | Measurement |
-| Latest warning | Most severe warning | Informational |
-| Warning details | Warning content and comment | Diagnostic |
+| Max warning level | Highest active level (1-3) | - |
+| Latest event name | Name of most severe warning | - |
+| Latest event level | Level of most severe warning | - |
+| Latest event probability | Probability of latest warning (%) | - |
+| Latest valid from | Start of validity period | - |
+| Latest valid to | End of validity period | - |
+| Latest warning content | Warning text (max 255 chars) | - |
 
-Attributes for "Latest warning": event name, level, probability, validity from-to
-Attributes for "Details": full warning content, comment
+The "Active warnings count" sensor contains a `warnings` attribute with the full list of all active warnings.
 
 Warnings can be filtered by:
 - Voivodeship (16 voivodeships)
 - County (more precise filtering) - optional
 
-### Hydrological warnings (4 sensors)
+### Hydrological warnings (8 sensors)
 
 | Sensor | Description | Type |
 |---|---|---|
 | Active warnings count | Number of current hydro warnings | Measurement |
-| Max hydro warning level | Highest active level | Measurement |
-| Latest hydro warning | Most severe hydro warning | Informational |
-| Hydro warning details | Description and affected areas | Diagnostic |
+| Max hydro warning level | Highest active level | - |
+| Latest hydro event name | Name/description of most severe warning | - |
+| Latest hydro event level | Level of most severe warning | - |
+| Latest hydro probability | Probability of latest warning (%) | - |
+| Latest hydro valid from | Start of validity period | - |
+| Latest hydro valid to | End of validity period | - |
+| Latest hydro description | Warning description (max 255 chars) | - |
 
-Attributes for "Latest warning": number, event, level, probability, validity from-to
-Attributes for "Details": full description, list of areas
+The "Active warnings count" sensor contains a `warnings` attribute with the full list of all active hydrological warnings.
 
 Warnings can be filtered by:
 - Voivodeship (16 voivodeships)
 - County (search in area descriptions) - optional
+
+### Weather forecast (weather entity)
+
+Optional `weather.*` entity with data from IMGW API Proxy. Supports:
+
+| Property | Description |
+|---|---|
+| Condition | Based on IMGW icon (sunny, cloudy, rain etc.) |
+| Temperature | Current air temperature (°C) |
+| Apparent temperature | Feels-like temperature (°C) |
+| Humidity | Air humidity (%) |
+| Pressure | Atmospheric pressure (hPa) |
+| Wind speed | Wind speed (m/s) |
+| Wind gust | Wind gust speed (m/s) |
+| Wind bearing | Wind direction (°) |
+| Cloud coverage | Cloud coverage (%) |
+
+Extra attributes: precipitation, snow, sunrise/sunset, IMGW icon, forecast model.
+
+Forecasts:
+- **Daily** - max/min temperature, wind, precipitation (day/night merged)
+- **Hourly** - full weather data for each hour
 
 ## Installation
 
@@ -174,7 +204,8 @@ Warnings can be filtered by:
    - Meteorological warnings
    - Hydrological warnings
 6. For warnings you can optionally enable county-level filtering
-7. Confirm configuration
+7. Optionally enable weather forecast (weather entity)
+8. Confirm configuration
 
 ### Manual mode
 
@@ -186,7 +217,8 @@ Warnings can be filtered by:
 6. System will find nearest stations for all data types
 7. Select data types you want to monitor
 8. For warnings you can optionally enable county-level filtering
-9. Confirm configuration
+9. Optionally enable weather forecast (weather entity)
+10. Confirm configuration
 
 ### Multiple instances
 
@@ -194,24 +226,25 @@ You can add the integration multiple times for different locations. Each instanc
 
 ## Options
 
-After adding the integration you can change the update interval:
+After adding the integration you can change settings:
 
 1. Go to **Settings - Devices & Services**
 2. Find **IMGW-PIB Monitor** entry
 3. Click **CONFIGURE**
 4. Set new update interval (5-120 minutes)
+5. Enable or disable weather forecast (weather entity)
 
-Default intervals:
-- Measurement data: 30 minutes
-- Warnings: 15 minutes (set globally)
+Default update interval: 30 minutes. The global coordinator syncs to the shortest interval across all instances.
 
 ## How the global coordinator works
 
 The integration uses two-tier coordinator architecture:
 
-1. **Global coordinator** - fetches all data from IMGW-PIB API every 15 minutes, regardless of number of integration instances. Uses rate limiting (2 concurrent requests with 200ms delay) to avoid overwhelming the API.
+1. **Global coordinator** - fetches all data from IMGW-PIB API. The interval syncs to the shortest interval across all integration instances. Uses rate limiting (2 concurrent requests with 200ms delay) to avoid overwhelming the API.
 
 2. **Instance coordinators** - each integration instance has its own coordinator that filters data from global coordinator and prepares it for its sensors. Updates occur according to set interval.
+
+3. **Forecast coordinator** (optional) - separate coordinator fetching weather forecast from IMGW API Proxy for the weather entity.
 
 Benefits:
 - One API request serves all integration instances
@@ -384,7 +417,7 @@ cards:
 
 IMGW-PIB API does not require a key and has no official limits, but it's worth being reasonable:
 
-- **Global coordinator** fetches data every 15 minutes
+- **Global coordinator** fetches data according to shortest instance interval (default 30 minutes)
 - **Rate limiting** - maximum 2 concurrent requests with 200ms delay
 - **Cache** - all instances use the same data
 - **Timeout** - requests timeout after 30 seconds
@@ -430,6 +463,9 @@ Data comes from public IMGW-PIB API:
 - `https://danepubliczne.imgw.pl/api/data/meteo`
 - `https://danepubliczne.imgw.pl/api/data/warningsmeteo`
 - `https://danepubliczne.imgw.pl/api/data/warningshydro`
+
+Weather forecast:
+- `https://imgw-api-proxy.evtlab.pl/forecast`
 
 > Measurement data provided by Instytut Meteorologii i Gospodarki Wodnej - Panstwowy Instytut Badawczy (Institute of Meteorology and Water Management - National Research Institute).
 

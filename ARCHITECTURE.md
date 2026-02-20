@@ -4,7 +4,7 @@
 
 ## Przegląd
 
-Integracja Home Assistant dla publicznego API IMGW-PIB (Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy). Wykorzystuje dwustopniową architekturę koordynatorów do efektywnego pobierania danych z 5 endpointów API, obsługuje 32 sensory oraz oferuje dwa tryby konfiguracji z zaawansowanym geokodowaniem i filtrowaniem ostrzeżeń na poziomie powiatów.
+Integracja Home Assistant dla publicznego API IMGW-PIB (Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy). Wykorzystuje wielostopniową architekturę koordynatorów do efektywnego pobierania danych z 5 endpointów API, obsługuje do 40 sensorów oraz opcjonalną encję pogodową z prognozą dzienną i godzinową. Oferuje dwa tryby konfiguracji z zaawansowanym geokodowaniem i filtrowaniem ostrzeżeń na poziomie powiatów.
 
 ## Architektura
 
@@ -25,7 +25,7 @@ Integracja Home Assistant dla publicznego API IMGW-PIB (Instytut Meteorologii i 
         ┌──────────────▼──────────────┐
         │  Global Coordinator         │
         │  (wspólny dla wszystkich)   │
-        │  - pobiera z API co 15 min  │
+        │  - interwał = min(instancje)│
         │  - rate limiting (2 req)    │
         └──────────────┬──────────────┘
                        │
@@ -39,21 +39,35 @@ Integracja Home Assistant dla publicznego API IMGW-PIB (Instytut Meteorologii i 
         │                              │
 ┌───────▼────────┐          ┌─────────▼────────┐
 │   Sensors 1    │          │   Sensors N      │
-│   (8-32)       │          │   (8-32)         │
+│   (8-40)       │          │   (8-40)         │
 └────────────────┘          └──────────────────┘
+
+        ┌──────────────────────────────┐
+        │  Forecast Coordinator        │
+        │  (opcjonalny, per instancja) │
+        │  - dane z IMGW API Proxy     │
+        │  - interwał = entry interval │
+        └──────────────┬───────────────┘
+                       │
+                ┌──────▼──────┐
+                │  Weather    │
+                │  Entity     │
+                │  (prognoza) │
+                └─────────────┘
 ```
 
 ## Struktura plików
 
 ```
 custom_components/imgw_pib_monitor/
-├── __init__.py              # Entry point, setup/unload
+├── __init__.py              # Entry point, setup/unload, migracja wersji
 ├── manifest.json            # Metadata integracji
-├── const.py                 # Stałe, endpointy, kody województw, współrzędne SYNOP
+├── const.py                 # Stałe, endpointy, kody województw, współrzędne SYNOP, mapowanie ikon
 ├── api.py                   # HTTP client dla IMGW-PIB API
-├── coordinator.py           # Global + Instance coordinators
+├── coordinator.py           # Global + Instance + Forecast coordinators
 ├── config_flow.py           # Config Flow (auto/manual) + Options Flow
-├── sensor.py                # Definicje 32 sensorów
+├── sensor.py                # Definicje 40 sensorów
+├── weather.py               # Encja pogodowa z prognozą dzienną i godzinową
 ├── utils.py                 # Geocoding, Haversine
 ├── strings.json             # Stringi bazowe (wymagane przez HA)
 └── translations/
@@ -138,7 +152,7 @@ Obsługuje dwa tryby konfiguracji:
 
 #### Global Coordinator (`ImgwGlobalDataCoordinator`)
 - **Cel**: Centralne pobieranie danych dla wszystkich instancji
-- **Interwał**: 15 minut (stały)
+- **Interwał**: Synchronizowany z najkrótszym interwałem spośród instancji (domyślnie 30 minut)
 - **Rate limiting**: Semafora z limitem 2 równoczesnych zapytań + 200ms opóźnienie
 - **Endpoints**: Pobiera wszystkie 5 endpointów równolegle przez `asyncio.gather`
 - **Cache**: Przechowuje dane w `self.data`, dostępne dla wszystkich instance coordinators
@@ -155,6 +169,14 @@ Obsługuje dwa tryby konfiguracji:
   4. Parsuje i waliduje wartości (`_safe_float`, `_safe_int`)
   5. Oblicza odległości do stacji
   6. Przygotowuje dane dla sensorów
+
+#### Forecast Coordinator (`ImgwForecastCoordinator`)
+- **Cel**: Pobieranie prognozy pogody z IMGW API Proxy
+- **Interwał**: Taki sam jak interwał instancji (domyślnie 30 minut)
+- **Endpoint**: `https://imgw-api-proxy.evtlab.pl/forecast?lat=...&lon=...`
+- **Tworzony**: Tylko gdy włączono prognozę pogody (`CONF_ENABLE_WEATHER_FORECAST`)
+- **Timeout**: 15 sekund
+- **Dane**: Aktualne warunki, prognoza dzienna i godzinowa
 
 ### 3. API Client (`api.py`)
 
@@ -198,20 +220,59 @@ SensorEntity (Home Assistant)
 
 #### Typy sensorów
 
-**Pomiarowe** (24 sensory):
+**Pomiarowe** (19 sensorów):
 - State class: MEASUREMENT
-- Device class: temperature, wind_speed, humidity, atmospheric_pressure, precipitation
-- Aktualizowane co 15-120 minut
+- Device class: temperature, wind_speed, humidity, atmospheric_pressure, precipitation, distance
+- Aktualizowane zgodnie z interwałem instancji
 
-**Diagnostyczne** (8 sensorów):
+**Diagnostyczne** (6 sensorów):
 - Entity category: DIAGNOSTIC
-- Zawierają: ID stacji, odległość, szczegóły ostrzeżeń
+- Zawierają: ID stacji, odległość
 - Nie są wyświetlane w głównym widoku
+
+**Informacyjne** (15 sensorów):
+- Ostrzeżenia: max_level, latest_event, latest_level, latest_probability, latest_valid_from, latest_valid_to, latest_content/description
+- Hydro: ice_phenomenon
 
 #### Grupowanie urządzeń
 
-- **Tryb auto**: Wszystkie sensory zgrupowane pod jednym urządzeniem "IMGW-PIB Monitor"
-- **Tryb manualny**: Oddzielne urządzenia per stacja (nazwa stacji) lub per region ostrzeżeń
+- **Stacje pomiarowe**: Oddzielne urządzenia per stacja (nazwa stacji + rzeka dla hydro)
+- **Ostrzeżenia meteo**: Osobne urządzenie per typ + region (województwo lub powiat)
+- **Ostrzeżenia hydro**: Osobne urządzenie per typ + region
+- **Prognoza pogody**: Osobne urządzenie "IMGW Prognoza — {lokalizacja}"
+
+### 4a. Encja pogodowa (`weather.py`)
+
+Opcjonalna platforma `weather` dostarczająca encję pogodową z prognozą:
+
+#### Hierarchia klas
+```
+WeatherEntity (Home Assistant)
+    └── CoordinatorEntity[ImgwForecastCoordinator]
+        └── ImgwWeatherEntity
+            └── implements:
+                - condition (z parse_imgw_icon)
+                - native_temperature, humidity, pressure, wind
+                - async_forecast_daily (grupowanie dzień/noc)
+                - async_forecast_hourly
+                - extra_state_attributes (opady, wschód/zachód)
+```
+
+#### Dane bieżące
+- Warunki pogodowe (na podstawie ikony IMGW)
+- Temperatura, temperatura odczuwalna
+- Wilgotność, ciśnienie
+- Prędkość wiatru, porywy, kierunek
+- Zachmurzenie
+
+#### Prognoza dzienna
+- Grupowanie wpisów dzień/noc w jedną prognozę per dzień
+- Temperatura max/min, wiatr max, suma opadów
+- Ikona z wpisu dziennego (priorytet) lub nocnego
+
+#### Prognoza godzinowa
+- Pełne dane pogodowe na każdą godzinę
+- Temperatura, odczuwalna, wilgotność, ciśnienie, wiatr, zachmurzenie, opady
 
 ### 5. Wyszukiwanie lokalizacji (`utils.py` i `config_flow.py`)
 
@@ -319,7 +380,7 @@ def haversine(lat1, lon1, lat2, lon2) -> float:
 ```
 1. Sprawdź czy global_coordinator istnieje
    ├─ NIE -> utwórz nowy ImgwGlobalDataCoordinator
-   └─ TAK -> użyj istniejącego
+   └─ TAK -> zsynchronizuj interwał do min(wszystkie instancje)
 
 2. Utwórz ImgwDataUpdateCoordinator dla tego entry
    ├─ przekaż global_coordinator
@@ -330,16 +391,24 @@ def haversine(lat1, lon1, lat2, lon2) -> float:
    ├─ global_coordinator pobiera dane z API
    └─ instance_coordinator filtruje dla swoich sensorów
 
-4. Forward setup do platform (sensor)
-   └─ sensor.async_setup_entry() tworzy sensory
+4. Jeśli CONF_ENABLE_WEATHER_FORECAST:
+   ├─ utwórz ImgwForecastCoordinator
+   ├─ wywołaj first_refresh() dla prognozy
+   └─ zapisz w hass.data[DOMAIN][entry_id + "_forecast"]
+   JEŚLI NIE:
+   └─ wyczyść ewentualną encję/urządzenie prognozy z rejestru
 
-5. Zarejestruj update listener dla Options Flow
+5. Forward setup do platform (sensor + opcjonalnie weather)
+   ├─ sensor.async_setup_entry() tworzy sensory
+   └─ weather.async_setup_entry() tworzy encję pogodową
+
+6. Zarejestruj update listener dla Options Flow
 ```
 
 ### Aktualizacja danych
 ```
 ┌─────────────────────────────────────────────┐
-│ Timer (co 15 min)                           │
+│ Timer (interwał = min(instancje))           │
 └─────────────────┬───────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────┐
@@ -485,28 +554,33 @@ for k, v in raw_attrs.items():
 | Meteo | `https://danepubliczne.imgw.pl/api/data/meteo` | JSON | Lista stacji meteorologicznych |
 | Warnings Meteo | `https://danepubliczne.imgw.pl/api/data/warningsmeteo` | JSON | Ostrzeżenia z kodami TERYT |
 | Warnings Hydro | `https://danepubliczne.imgw.pl/api/data/warningshydro` | JSON | Ostrzeżenia z listą obszarów |
+| Forecast | `https://imgw-api-proxy.evtlab.pl/forecast` | JSON | Prognoza pogody (aktualna, dzienna, godzinowa) |
 
 ## Wymagania techniczne
 
-- **Home Assistant**: 2024.6+
+- **Home Assistant**: 2024.1.0+
 - **Python**: 3.12+
 - **Dependencies**: aiohttp (wbudowane w HA), voluptuous (wbudowane w HA)
 - **API**: Brak wymagań autentykacji
+- **Platformy**: `sensor`, `weather` (opcjonalna)
+- **Wersja konfiguracji**: 8 (z automatyczną migracją starszych wersji)
 - **Network**: Dostęp do:
-  - `danepubliczne.imgw.pl` (dane pomiarowe)
-  - `imgw-api-proxy.evtlab.pl` (wyszukiwanie lokalizacji, kody TERYT)
+  - `danepubliczne.imgw.pl` (dane pomiarowe i ostrzeżenia)
+  - `imgw-api-proxy.evtlab.pl` (wyszukiwanie lokalizacji, kody TERYT, prognoza pogody)
+  - `nominatim.openstreetmap.org` (reverse geocoding w trybie auto-discovery)
 
 ## Limity i ograniczenia
 
 ### Limity API IMGW-PIB
 - Brak oficjalnych limitów
 - Integracja używa rate limiting (2 req + 200ms) jako dobre praktyki
-- Globalny coordinator: 5 zapytań co 15 minut
+- Globalny coordinator: 5 zapytań per cykl aktualizacji
 
 ### Limity IMGW API Proxy
 - Brak oficjalnych limitów dla wyszukiwania lokalizacji
-- Używane tylko podczas konfiguracji (nie podczas runtime)
-- Timeout: 10 sekund
+- Wyszukiwanie lokalizacji: używane tylko podczas konfiguracji (nie podczas runtime)
+- Prognoza pogody: pobierana w runtime (osobny koordynator, timeout 15 sekund)
+- Timeout wyszukiwania: 10 sekund
 
 ### Ograniczenia funkcjonalne
 - Stacje SYNOP: brak współrzędnych z API (używamy zakodowanych)
