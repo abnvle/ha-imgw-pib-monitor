@@ -150,7 +150,7 @@ class TestWarningsMeteoSensorValues:
 
     def test_latest_event(self):
         sensor = next(s for s in WARNINGS_METEO_SENSORS if s.key == "warnings_meteo_latest_event")
-        assert sensor.value_fn(self.data) == "Silny wiatr"
+        assert sensor.value_fn(self.data) == "Silny wiatr | Oblodzenie"
 
     def test_latest_level(self):
         sensor = next(s for s in WARNINGS_METEO_SENSORS if s.key == "warnings_meteo_latest_level")
