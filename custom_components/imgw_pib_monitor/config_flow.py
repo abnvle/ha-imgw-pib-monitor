@@ -61,6 +61,47 @@ from .utils import geocode_location, haversine, nominatim_reverse_geocode, rever
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _find_nearest_synop(
+    stations: list[dict[str, Any]], lat: float, lon: float
+) -> str | None:
+    """Find nearest SYNOP station using hardcoded coordinates."""
+    nearest, dist_min = None, DEFAULT_MAX_DISTANCE
+    for s in stations:
+        sid = str(s.get("id_stacji"))
+        coords = SYNOP_STATIONS.get(sid)
+        if not coords:
+            continue
+        d = haversine(lat, lon, coords[0], coords[1])
+        if d < dist_min:
+            dist_min, nearest = d, sid
+    return nearest
+
+
+def _find_nearest_station(
+    stations: list[dict[str, Any]],
+    lat: float,
+    lon: float,
+    lat_key: str,
+    lon_key: str,
+    id_key: str,
+) -> str | None:
+    """Find nearest station using coordinates from API data."""
+    nearest, dist_min = None, DEFAULT_MAX_DISTANCE
+    for s in stations:
+        try:
+            s_lat = float(s.get(lat_key) or s.get("szerokosc") or 0)
+            s_lon = float(s.get(lon_key) or s.get("dlugosc") or 0)
+            if not s_lat or not s_lon:
+                continue
+            d = haversine(lat, lon, s_lat, s_lon)
+            if d < dist_min:
+                dist_min, nearest = d, s.get(id_key)
+        except (ValueError, TypeError):
+            continue
+    return nearest
+
+
 class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a minimalist and smart config flow for IMGW-PIB Monitor."""
 
@@ -133,37 +174,10 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             synop_data, hydro_data, meteo_data = results
 
-            def find_nearest_synop(stations):
-                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
-                for s in stations:
-                    sid = str(s.get("id_stacji"))
-                    coords = SYNOP_STATIONS.get(sid)
-                    if not coords:
-                        continue
-                    d = haversine(lat, lon, coords[0], coords[1])
-                    if d < dist_min:
-                        dist_min, nearest = d, sid
-                return nearest
-
-            def find_nearest(stations, lat_key, lon_key, id_key):
-                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
-                for s in stations:
-                    try:
-                        s_lat = float(s.get(lat_key) or s.get("szerokosc") or 0)
-                        s_lon = float(s.get(lon_key) or s.get("dlugosc") or 0)
-                        if not s_lat or not s_lon:
-                            continue
-                        d = haversine(lat, lon, s_lat, s_lon)
-                        if d < dist_min:
-                            dist_min, nearest = d, s.get(id_key)
-                    except (ValueError, TypeError):
-                        continue
-                return nearest
-
             # Find nearest for each type independently
-            self._nearest_synop = find_nearest_synop(synop_data)
-            self._nearest_hydro = find_nearest(hydro_data, "lat", "lon", "id_stacji")
-            self._nearest_meteo = find_nearest(meteo_data, "lat", "lon", "kod_stacji")
+            self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
+            self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "lat", "lon", "id_stacji")
+            self._nearest_meteo = _find_nearest_station(meteo_data, lat, lon, "lat", "lon", "kod_stacji")
             self._location_coords = (lat, lon)
 
             # Get location name from Nominatim, then use it to query IMGW for admin details
@@ -483,44 +497,17 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             synop_data, hydro_data, meteo_data = results
 
-            def find_nearest_synop(stations):
-                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
-                for s in stations:
-                    sid = str(s.get("id_stacji"))
-                    coords = SYNOP_STATIONS.get(sid)
-                    if not coords:
-                        continue
-                    d = haversine(lat, lon, coords[0], coords[1])
-                    if d < dist_min:
-                        dist_min, nearest = d, sid
-                return nearest
-
-            def find_nearest(stations, lat_key, lon_key, id_key):
-                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
-                for s in stations:
-                    try:
-                        s_lat = float(s.get(lat_key) or s.get("szerokosc") or 0)
-                        s_lon = float(s.get(lon_key) or s.get("dlugosc") or 0)
-                        if not s_lat or not s_lon:
-                            continue
-                        d = haversine(lat, lon, s_lat, s_lon)
-                        if d < dist_min:
-                            dist_min, nearest = d, s.get(id_key)
-                    except (ValueError, TypeError):
-                        continue
-                return nearest
-
             # Find nearest for each type independently
-            self._nearest_synop = find_nearest_synop(synop_data)
-            self._nearest_hydro = find_nearest(hydro_data, "lat", "lon", "id_stacji")
-            self._nearest_meteo = find_nearest(meteo_data, "lat", "lon", "kod_stacji")
+            self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
+            self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "lat", "lon", "id_stacji")
+            self._nearest_meteo = _find_nearest_station(meteo_data, lat, lon, "lat", "lon", "kod_stacji")
 
             if not self._nearest_synop and not self._nearest_hydro and not self._nearest_meteo:
                 errors["base"] = "no_stations_nearby"
                 return self.async_show_form(
                     step_id="manual_start",
                     data_schema=vol.Schema({
-                        vol.Required("location_name", default=location_name): TextSelector(
+                        vol.Required("location_name", default=self._data.get("location_name", "")): TextSelector(
                             TextSelectorConfig(type="text", autocomplete="off")
                         )
                     }),

@@ -8,7 +8,7 @@
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/hassfest.yml?label=Hassfest&logo=github&style=popout)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/hassfest.yml)
 [![Tests](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/tests.yml?label=Tests&logo=github&style=popout)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/tests.yml)
 
-[Wersja polska](README.md)
+*[Wersja polska](README.md)*
 
 Home Assistant integration using public data from IMGW-PIB (Institute of Meteorology and Water Management - National Research Institute). Provides weather, hydrological, and warning data for any location in Poland.
 

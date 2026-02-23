@@ -1,6 +1,6 @@
 # IMGW-PIB Monitor - Architektura
 
-[English version](ARCHITECTURE_EN.md)
+*[English version](ARCHITECTURE_EN.md)*
 
 ## Przegląd
 

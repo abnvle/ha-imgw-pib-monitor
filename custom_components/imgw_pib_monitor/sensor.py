@@ -306,9 +306,11 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         translation_key="warnings_meteo_latest_event",
         icon="mdi:weather-lightning",
         value_fn=lambda data: (
-            data["latest_warning"]["event"]
-            if data.get("latest_warning")
-            else None
+            " | ".join(
+                w["event"]
+                for w in data.get("warnings", [])
+                if w.get("event")
+            )[:255] or None
         ),
     ),
     ImgwSensorEntityDescription(
@@ -357,9 +359,11 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         translation_key="warnings_meteo_latest_content",
         icon="mdi:text-box-outline",
         value_fn=lambda data: (
-            (data["latest_warning"]["content"] or "")[:255]
-            if data.get("latest_warning")
-            else None
+            " | ".join(
+                w["content"]
+                for w in data.get("warnings", [])
+                if w.get("content")
+            )[:255] or None
         ),
     ),
 )
@@ -384,9 +388,11 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         translation_key="warnings_hydro_latest_event",
         icon="mdi:water-alert",
         value_fn=lambda data: (
-            (data["latest_warning"]["event"] or data["latest_warning"].get("description", "")[:80])
-            if data.get("latest_warning")
-            else None
+            " | ".join(
+                w.get("event") or (w.get("description") or "")[:80]
+                for w in data.get("warnings", [])
+                if w.get("event") or w.get("description")
+            )[:255] or None
         ),
     ),
     ImgwSensorEntityDescription(
@@ -435,9 +441,11 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         translation_key="warnings_hydro_latest_description",
         icon="mdi:text-box-outline",
         value_fn=lambda data: (
-            (data["latest_warning"].get("description") or "")[:255]
-            if data.get("latest_warning")
-            else None
+            " | ".join(
+                w["description"]
+                for w in data.get("warnings", [])
+                if w.get("description")
+            )[:255] or None
         ),
     ),
 )
@@ -492,7 +500,6 @@ class ImgwSensorEntity(CoordinatorEntity[ImgwDataUpdateCoordinator], SensorEntit
     entity_description: ImgwSensorEntityDescription
     _attr_has_entity_name = True
     _attr_attribution = ATTRIBUTION
-    _attr_force_update = True
 
     def __init__(
         self,

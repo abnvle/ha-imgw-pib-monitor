@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 import logging
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -15,7 +16,7 @@ import aiohttp
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import ImgwApiClient
+from .api import ImgwApiClient, ImgwApiError
 from .const import (
     CONF_AUTO_DETECT,
     CONF_ENABLE_WARNINGS_HYDRO,
@@ -58,27 +59,34 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.api = api
         self._semaphore = asyncio.Semaphore(2)
+        self._fetch_lock = asyncio.Lock()
+        self._last_fetch_time: float = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch all data from IMGW API without blocking the loop."""
         _LOGGER.debug("Fetching all IMGW-PIB data with rate limiting")
 
-        async def _fetch_with_limit(coro):
+        async def _fetch_with_limit(coro, endpoint_name: str):
             async with self._semaphore:
                 try:
                     res = await coro
                     await asyncio.sleep(0.2)
+                    _LOGGER.debug(
+                        "IMGW endpoint %s returned %d items",
+                        endpoint_name,
+                        len(res) if isinstance(res, list) else 0,
+                    )
                     return res
-                except Exception as err:
-                    _LOGGER.warning("Error fetching IMGW endpoint: %s", err)
+                except (ImgwApiError, asyncio.TimeoutError) as err:
+                    _LOGGER.warning("Error fetching IMGW endpoint %s: %s", endpoint_name, err)
                     return []
 
         results = await asyncio.gather(
-            _fetch_with_limit(self.api.get_all_synop_data()),
-            _fetch_with_limit(self.api.get_all_hydro_data()),
-            _fetch_with_limit(self.api.get_all_meteo_data()),
-            _fetch_with_limit(self.api.get_warnings_meteo()),
-            _fetch_with_limit(self.api.get_warnings_hydro()),
+            _fetch_with_limit(self.api.get_all_synop_data(), "synop"),
+            _fetch_with_limit(self.api.get_all_hydro_data(), "hydro"),
+            _fetch_with_limit(self.api.get_all_meteo_data(), "meteo"),
+            _fetch_with_limit(self.api.get_warnings_meteo(), "warnings_meteo"),
+            _fetch_with_limit(self.api.get_warnings_hydro(), "warnings_hydro"),
         )
 
         data: dict[str, Any] = {
@@ -92,7 +100,29 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if all(not r for r in results):
             raise UpdateFailed("Failed to fetch any data from IMGW API")
 
+        self._last_fetch_time = time.monotonic()
         return data
+
+    async def async_fetch_data(self) -> dict[str, Any]:
+        """Fetch fresh data with deduplication for concurrent callers.
+
+        Multiple entry coordinators may call this at roughly the same time.
+        The lock ensures only one actual API call is made; subsequent callers
+        within a short window reuse the same result.
+        """
+        async with self._fetch_lock:
+            now = time.monotonic()
+            # If data was fetched less than 30 seconds ago, reuse it
+            if self.data and now - self._last_fetch_time < 30:
+                _LOGGER.debug(
+                    "Reusing global data fetched %.1fs ago",
+                    now - self._last_fetch_time,
+                )
+                return self.data
+
+            data = await self._async_update_data()
+            self.data = data
+            return data
 
 
 class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -119,13 +149,17 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Prepare specific slice of data for this entry."""
-        # Always refresh global data from IMGW API.
-        # The global coordinator has no entity listeners of its own, so its
-        # automatic scheduling never fires.  We must trigger it explicitly
-        # each time the entry coordinator's timer fires.
-        await self.global_coordinator.async_refresh()
+        # Fetch fresh data directly from the global coordinator.
+        # We bypass async_refresh() because it silently swallows errors
+        # and keeps stale self.data, making sensors show old values
+        # without any indication of a problem.
+        try:
+            global_data = await self.global_coordinator.async_fetch_data()
+        except UpdateFailed:
+            raise
+        except Exception as err:
+            raise UpdateFailed(f"Failed to fetch IMGW data: {err}") from err
 
-        global_data = self.global_coordinator.data
         if not global_data:
             raise UpdateFailed("Global IMGW data is unavailable")
 

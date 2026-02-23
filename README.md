@@ -8,7 +8,7 @@
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/hassfest.yml?label=Hassfest&logo=github&style=popout)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/hassfest.yml)
 [![Tests](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/tests.yml?label=Tests&logo=github&style=popout)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/tests.yml)
 
-[English version](README_EN.md)
+*[English version](README_EN.md)*
 
 Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy). Dostarcza dane pogodowe, hydrologiczne i ostrzeżenia dla dowolnej lokalizacji w Polsce.
 
