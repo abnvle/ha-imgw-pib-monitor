@@ -5,13 +5,18 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 import logging
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import ImgwApiClient
+import aiohttp
+
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .api import ImgwApiClient, ImgwApiError
 from .const import (
     CONF_AUTO_DETECT,
     CONF_ENABLE_WARNINGS_HYDRO,
@@ -30,6 +35,8 @@ from .const import (
     DATA_TYPE_WARNINGS_METEO,
     DEFAULT_MAX_DISTANCE,
     DOMAIN,
+    FORECAST_API_URL,
+    FORECAST_UPDATE_INTERVAL,
     SYNOP_STATIONS,
     VOIVODESHIP_CAPITALS,
     VOIVODESHIPS,
@@ -41,37 +48,45 @@ _LOGGER = logging.getLogger(__name__)
 class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Global coordinator to fetch all IMGW-PIB data with rate limiting."""
 
-    def __init__(self, hass: HomeAssistant, api: ImgwApiClient) -> None:
+    def __init__(self, hass: HomeAssistant, api: ImgwApiClient, update_interval_minutes: int | None = None) -> None:
         """Initialize the global coordinator."""
+        interval = timedelta(minutes=update_interval_minutes) if update_interval_minutes else timedelta(minutes=15)
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_global",
-            update_interval=timedelta(minutes=15),
+            update_interval=interval,
         )
         self.api = api
         self._semaphore = asyncio.Semaphore(2)
+        self._fetch_lock = asyncio.Lock()
+        self._last_fetch_time: float = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch all data from IMGW API without blocking the loop."""
         _LOGGER.debug("Fetching all IMGW-PIB data with rate limiting")
 
-        async def _fetch_with_limit(coro):
+        async def _fetch_with_limit(coro, endpoint_name: str):
             async with self._semaphore:
                 try:
                     res = await coro
                     await asyncio.sleep(0.2)
+                    _LOGGER.debug(
+                        "IMGW endpoint %s returned %d items",
+                        endpoint_name,
+                        len(res) if isinstance(res, list) else 0,
+                    )
                     return res
-                except Exception as err:
-                    _LOGGER.warning("Error fetching IMGW endpoint: %s", err)
+                except (ImgwApiError, asyncio.TimeoutError) as err:
+                    _LOGGER.warning("Error fetching IMGW endpoint %s: %s", endpoint_name, err)
                     return []
 
         results = await asyncio.gather(
-            _fetch_with_limit(self.api.get_all_synop_data()),
-            _fetch_with_limit(self.api.get_all_hydro_data()),
-            _fetch_with_limit(self.api.get_all_meteo_data()),
-            _fetch_with_limit(self.api.get_warnings_meteo()),
-            _fetch_with_limit(self.api.get_warnings_hydro()),
+            _fetch_with_limit(self.api.get_all_synop_data(), "synop"),
+            _fetch_with_limit(self.api.get_all_hydro_data(), "hydro"),
+            _fetch_with_limit(self.api.get_all_meteo_data(), "meteo"),
+            _fetch_with_limit(self.api.get_warnings_meteo(), "warnings_meteo"),
+            _fetch_with_limit(self.api.get_warnings_hydro(), "warnings_hydro"),
         )
 
         data: dict[str, Any] = {
@@ -85,7 +100,29 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if all(not r for r in results):
             raise UpdateFailed("Failed to fetch any data from IMGW API")
 
+        self._last_fetch_time = time.monotonic()
         return data
+
+    async def async_fetch_data(self) -> dict[str, Any]:
+        """Fetch fresh data with deduplication for concurrent callers.
+
+        Multiple entry coordinators may call this at roughly the same time.
+        The lock ensures only one actual API call is made; subsequent callers
+        within a short window reuse the same result.
+        """
+        async with self._fetch_lock:
+            now = time.monotonic()
+            # If data was fetched less than 30 seconds ago, reuse it
+            if self.data and now - self._last_fetch_time < 30:
+                _LOGGER.debug(
+                    "Reusing global data fetched %.1fs ago",
+                    now - self._last_fetch_time,
+                )
+                return self.data
+
+            data = await self._async_update_data()
+            self.data = data
+            return data
 
 
 class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -112,10 +149,17 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Prepare specific slice of data for this entry."""
-        if not self.global_coordinator.data:
-            await self.global_coordinator.async_config_entry_first_refresh()
-        
-        global_data = self.global_coordinator.data
+        # Fetch fresh data directly from the global coordinator.
+        # We bypass async_refresh() because it silently swallows errors
+        # and keeps stale self.data, making sensors show old values
+        # without any indication of a problem.
+        try:
+            global_data = await self.global_coordinator.async_fetch_data()
+        except UpdateFailed:
+            raise
+        except Exception as err:
+            raise UpdateFailed(f"Failed to fetch IMGW data: {err}") from err
+
         if not global_data:
             raise UpdateFailed("Global IMGW data is unavailable")
 
@@ -131,7 +175,6 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             DATA_TYPE_METEO: {},
             DATA_TYPE_WARNINGS_METEO: {},
             DATA_TYPE_WARNINGS_HYDRO: {},
-            "auto": {},
         }
 
         # 1. Synop
@@ -148,8 +191,6 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         parsed["latitude"] = s_lat
                         parsed["longitude"] = s_lon
                     result[DATA_TYPE_SYNOP][sid] = parsed
-                    if self.config_data.get(CONF_AUTO_DETECT):
-                        result["auto"][DATA_TYPE_SYNOP] = parsed
                     break
 
         # 2. Hydro
@@ -160,8 +201,6 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if ha_lat and ha_lon and parsed.get("latitude") and parsed.get("longitude"):
                         parsed["distance"] = round(haversine(ha_lat, ha_lon, parsed["latitude"], parsed["longitude"]), 1)
                     result[DATA_TYPE_HYDRO][sid] = parsed
-                    if self.config_data.get(CONF_AUTO_DETECT):
-                        result["auto"][DATA_TYPE_HYDRO] = parsed
                     break
 
         # 3. Meteo
@@ -172,8 +211,6 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if ha_lat and ha_lon and parsed.get("latitude") and parsed.get("longitude"):
                         parsed["distance"] = round(haversine(ha_lat, ha_lon, parsed["latitude"], parsed["longitude"]), 1)
                     result[DATA_TYPE_METEO][sid] = parsed
-                    if self.config_data.get(CONF_AUTO_DETECT):
-                        result["auto"][DATA_TYPE_METEO] = parsed
                     break
 
         # 4. Warnings Meteo
@@ -389,7 +426,7 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "number": w.get("numer"),
                 "event": w.get("zdarzenie"),
                 "level": lvl,
-                "probability": w.get("prawdopodobienstwo"),
+                "probability": int(w.get("prawdopodobienstwo", 0)),
                 "valid_from": w.get("data_od"),
                 "valid_to": w.get("data_do"),
                 "description": w.get("przebieg"),
@@ -427,3 +464,43 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return int(v)
         except (ValueError, TypeError):
             return None
+
+
+class ImgwForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Fetch weather forecast data from IMGW API Proxy."""
+
+    def __init__(self, hass: HomeAssistant, lat: float, lon: float, update_interval_minutes: int | None = None) -> None:
+        """Initialize the forecast coordinator."""
+        if update_interval_minutes is not None:
+            interval = timedelta(minutes=update_interval_minutes)
+        else:
+            interval = timedelta(seconds=FORECAST_UPDATE_INTERVAL)
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_forecast",
+            update_interval=interval,
+        )
+        self.lat = lat
+        self.lon = lon
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch forecast data from IMGW API Proxy."""
+        url = f"{FORECAST_API_URL}/forecast?lat={self.lat}&lon={self.lon}"
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=15)
+            ) as resp:
+                if resp.status != 200:
+                    raise UpdateFailed(
+                        f"IMGW forecast API returned {resp.status}"
+                    )
+                data = await resp.json()
+                if "data" in data and isinstance(data["data"], dict):
+                    return data["data"]
+                return data
+        except aiohttp.ClientError as err:
+            raise UpdateFailed(
+                f"Error communicating with IMGW forecast API: {err}"
+            ) from err

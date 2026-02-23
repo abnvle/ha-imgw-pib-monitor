@@ -42,30 +42,37 @@ class ImgwApiClient:
         except Exception as err:
             raise ImgwApiError(f"Unexpected error: {err}") from err
 
+    async def _fetch_list(self, url: str, endpoint_name: str) -> list[dict[str, Any]]:
+        """Fetch data and validate it is a list."""
+        data = await self._fetch(url)
+        if not isinstance(data, list):
+            _LOGGER.warning(
+                "IMGW %s returned unexpected type %s, expected list",
+                endpoint_name,
+                type(data).__name__,
+            )
+            return []
+        return data
+
     async def get_all_synop_data(self) -> list[dict[str, Any]]:
         """Get synoptic data for all stations."""
-        data = await self._fetch(API_ENDPOINT_SYNOP)
-        return data if isinstance(data, list) else []
+        return await self._fetch_list(API_ENDPOINT_SYNOP, "synop")
 
     async def get_all_hydro_data(self) -> list[dict[str, Any]]:
         """Get hydrological data for all stations."""
-        data = await self._fetch(API_ENDPOINT_HYDRO)
-        return data if isinstance(data, list) else []
+        return await self._fetch_list(API_ENDPOINT_HYDRO, "hydro")
 
     async def get_all_meteo_data(self) -> list[dict[str, Any]]:
         """Get meteorological data for all stations."""
-        data = await self._fetch(API_ENDPOINT_METEO)
-        return data if isinstance(data, list) else []
+        return await self._fetch_list(API_ENDPOINT_METEO, "meteo")
 
     async def get_warnings_meteo(self) -> list[dict[str, Any]]:
         """Get all meteorological warnings."""
-        data = await self._fetch(API_ENDPOINT_WARNINGS_METEO)
-        return data if isinstance(data, list) else []
+        return await self._fetch_list(API_ENDPOINT_WARNINGS_METEO, "warnings_meteo")
 
     async def get_warnings_hydro(self) -> list[dict[str, Any]]:
         """Get all hydrological warnings."""
-        data = await self._fetch(API_ENDPOINT_WARNINGS_HYDRO)
-        return data if isinstance(data, list) else []
+        return await self._fetch_list(API_ENDPOINT_WARNINGS_HYDRO, "warnings_hydro")
 
     async def get_synop_stations(self) -> dict[str, str]:
         """Return {id: name} for all synoptic stations."""

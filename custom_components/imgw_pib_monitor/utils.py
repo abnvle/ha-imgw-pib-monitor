@@ -8,90 +8,122 @@ from typing import Any
 import aiohttp
 
 
+async def nominatim_reverse_geocode(
+    session: aiohttp.ClientSession,
+    lat: float,
+    lon: float,
+) -> str | None:
+    """Reverse geocode coordinates to a city/village name using Nominatim.
+
+    Used in autodiscovery mode where only GPS coordinates are available.
+    Should be called once during config flow setup.
+    """
+    url = "https://nominatim.openstreetmap.org/reverse"
+    params = {
+        "lat": str(lat),
+        "lon": str(lon),
+        "format": "json",
+        "accept-language": "pl",
+        "zoom": "10",
+    }
+    headers = {"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.0.0"}
+
+    try:
+        async with session.get(
+            url,
+            params=params,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            if not data or "error" in data:
+                return None
+
+            address = data.get("address", {})
+            return (
+                address.get("city")
+                or address.get("town")
+                or address.get("village")
+                or data.get("name")
+            )
+    except (aiohttp.ClientError, ValueError, KeyError):
+        return None
+
+
 async def reverse_geocode(
-    session: aiohttp.ClientSession, lat: float, lon: float, voivodeship_capitals: dict[str, tuple[float, float]] | None = None
+    session: aiohttp.ClientSession,
+    lat: float,
+    lon: float,
+    search_hints: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Reverse geocode coordinates using IMGW API Proxy.
+
+    Searches the IMGW location database using provided search hints
+    (typically nearby station names) and returns the closest result
+    within 50 km of the given coordinates.
 
     Args:
         session: aiohttp client session
         lat: Latitude
         lon: Longitude
-        voivodeship_capitals: Dictionary of voivodeship codes to (lat, lon) tuples
+        search_hints: List of place/station names to use as search terms.
+                      Each name is queried; the closest overall result wins.
 
     Returns:
-        Location details dictionary with keys: teryt, province, district, commune, name
-        or None if not found
+        Location details dictionary with keys: teryt, province, district,
+        commune, name — or None if nothing found within 50 km.
     """
-    # Find nearest voivodeship capital to narrow down search
-    search_query = ""
-    if voivodeship_capitals:
-        min_dist = float("inf")
-        for capital_lat, capital_lon in voivodeship_capitals.values():
-            dist = haversine(lat, lon, capital_lat, capital_lon)
-            if dist < min_dist:
-                min_dist = dist
+    if not search_hints:
+        return None
 
-    # Try searching with empty query to get broad results
-    # The API returns locations sorted by rank, we'll find the nearest one
     url = "https://imgw-api-proxy.evtlab.pl/search"
-    params = {
-        "name": "",  # Empty search to get many results
-    }
-    headers = {
-        "User-Agent": "HomeAssistant-IMGW-PIB-Monitor/1.1.0",
-    }
+    headers = {"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/1.1.0"}
+
+    best_location = None
+    best_distance = float("inf")
 
     try:
-        # If empty search doesn't work, we'll try a few common city names
-        search_attempts = ["", "Warszawa", "Kraków", "Poznań"]
-
-        for attempt in search_attempts:
-            params["name"] = attempt
+        for hint in search_hints:
+            if not hint:
+                continue
             async with session.get(
-                url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+                url,
+                params={"name": hint},
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 if resp.status != 200:
                     continue
 
                 data = await resp.json()
-                if not data or not isinstance(data, list) or len(data) == 0:
+                if not data or not isinstance(data, list):
                     continue
-
-                # Find the closest location
-                closest_location = None
-                min_distance = float("inf")
 
                 for location in data:
                     try:
                         loc_lat = float(location.get("lat", 0))
                         loc_lon = float(location.get("lon", 0))
-
                         if not loc_lat or not loc_lon:
                             continue
 
                         dist = haversine(lat, lon, loc_lat, loc_lon)
-
-                        # Only consider locations within 50km
-                        if dist < min_distance and dist < 50:
-                            min_distance = dist
-                            closest_location = location
-
+                        if dist < best_distance and dist < 50:
+                            best_distance = dist
+                            best_location = location
                     except (ValueError, TypeError):
                         continue
 
-                if closest_location:
-                    # Return location details in the same format as geocode_location
-                    return {
-                        "teryt": closest_location.get("teryt"),
-                        "province": closest_location.get("province"),
-                        "district": closest_location.get("district"),
-                        "commune": closest_location.get("commune"),
-                        "name": closest_location.get("name"),
-                        "synoptic": closest_location.get("synoptic", False),
-                    }
-
-        return None
+        if best_location:
+            return {
+                "teryt": best_location.get("teryt"),
+                "province": best_location.get("province"),
+                "district": best_location.get("district"),
+                "commune": best_location.get("commune"),
+                "name": best_location.get("name"),
+                "synoptic": best_location.get("synoptic", False),
+            }
 
     except (aiohttp.ClientError, ValueError, KeyError):
         pass

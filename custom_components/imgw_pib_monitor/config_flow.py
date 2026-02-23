@@ -31,6 +31,10 @@ from .const import (
     CONF_AUTO_DETECT,
     CONF_ENABLE_WARNINGS_HYDRO,
     CONF_ENABLE_WARNINGS_METEO,
+    CONF_ENABLE_WEATHER_FORECAST,
+    CONF_FORECAST_LAT,
+    CONF_FORECAST_LON,
+    CONF_LOCATION_NAME,
     CONF_POWIAT,
     CONF_POWIAT_NAME,
     CONF_SELECTED_HYDRO,
@@ -53,14 +57,55 @@ from .const import (
     VOIVODESHIP_CAPITALS,
     VOIVODESHIPS,
 )
-from .utils import geocode_location, haversine, reverse_geocode
+from .utils import geocode_location, haversine, nominatim_reverse_geocode, reverse_geocode
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _find_nearest_synop(
+    stations: list[dict[str, Any]], lat: float, lon: float
+) -> str | None:
+    """Find nearest SYNOP station using hardcoded coordinates."""
+    nearest, dist_min = None, DEFAULT_MAX_DISTANCE
+    for s in stations:
+        sid = str(s.get("id_stacji"))
+        coords = SYNOP_STATIONS.get(sid)
+        if not coords:
+            continue
+        d = haversine(lat, lon, coords[0], coords[1])
+        if d < dist_min:
+            dist_min, nearest = d, sid
+    return nearest
+
+
+def _find_nearest_station(
+    stations: list[dict[str, Any]],
+    lat: float,
+    lon: float,
+    lat_key: str,
+    lon_key: str,
+    id_key: str,
+) -> str | None:
+    """Find nearest station using coordinates from API data."""
+    nearest, dist_min = None, DEFAULT_MAX_DISTANCE
+    for s in stations:
+        try:
+            s_lat = float(s.get(lat_key) or s.get("szerokosc") or 0)
+            s_lon = float(s.get(lon_key) or s.get("dlugosc") or 0)
+            if not s_lat or not s_lon:
+                continue
+            d = haversine(lat, lon, s_lat, s_lon)
+            if d < dist_min:
+                dist_min, nearest = d, s.get(id_key)
+        except (ValueError, TypeError):
+            continue
+    return nearest
+
 
 class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a minimalist and smart config flow for IMGW-PIB Monitor."""
 
-    VERSION = 7
+    VERSION = 8
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -73,6 +118,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
         self._detected_powiat_code: str | None = None
         self._detected_powiat_name: str | None = None
         self._detected_voivodeship: str | None = None
+        self._detected_location_name: str | None = None
         self._location_results: list[tuple[float, float, dict[str, Any], str]] = []
 
     @staticmethod
@@ -128,85 +174,63 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             synop_data, hydro_data, meteo_data = results
 
-            def find_nearest_synop(stations):
-                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
-                for s in stations:
-                    sid = str(s.get("id_stacji"))
-                    coords = SYNOP_STATIONS.get(sid)
-                    if not coords:
-                        continue
-                    d = haversine(lat, lon, coords[0], coords[1])
-                    if d < dist_min:
-                        dist_min, nearest = d, sid
-                return nearest
-
-            def find_nearest(stations, lat_key, lon_key, id_key):
-                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
-                for s in stations:
-                    try:
-                        s_lat = float(s.get(lat_key) or s.get("szerokosc") or 0)
-                        s_lon = float(s.get(lon_key) or s.get("dlugosc") or 0)
-                        if not s_lat or not s_lon:
-                            continue
-                        d = haversine(lat, lon, s_lat, s_lon)
-                        if d < dist_min:
-                            dist_min, nearest = d, s.get(id_key)
-                    except (ValueError, TypeError):
-                        continue
-                return nearest
-
             # Find nearest for each type independently
-            self._nearest_synop = find_nearest_synop(synop_data)
-            self._nearest_hydro = find_nearest(hydro_data, "lat", "lon", "id_stacji")
-            self._nearest_meteo = find_nearest(meteo_data, "lat", "lon", "kod_stacji")
+            self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
+            self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "lat", "lon", "id_stacji")
+            self._nearest_meteo = _find_nearest_station(meteo_data, lat, lon, "lat", "lon", "kod_stacji")
             self._location_coords = (lat, lon)
 
-            # Try to detect powiat using reverse geocoding with IMGW API
+            # Get location name from Nominatim, then use it to query IMGW for admin details
             try:
-                location_details = await reverse_geocode(
-                    async_get_clientsession(self.hass), lat, lon, VOIVODESHIP_CAPITALS
-                )
-                if location_details:
-                    _LOGGER.debug("Auto-discovery reverse geocode - province: %s, district: %s, teryt: %s",
-                                 location_details.get("province"), location_details.get("district"),
-                                 location_details.get("teryt"))
+                session = async_get_clientsession(self.hass)
 
-                    # Get voivodeship from API response (province field)
-                    province_name = location_details.get("province", "")
-                    voivodeship = None
+                # Step 1: Nominatim reverse geocoding to get city/village name
+                nominatim_name = await nominatim_reverse_geocode(session, lat, lon)
+                if nominatim_name:
+                    self._detected_location_name = nominatim_name
+                    _LOGGER.debug("Auto-discovery: Nominatim returned: %s", nominatim_name)
 
-                    # Match province name to voivodeship code
-                    if province_name:
-                        for voiv_code, voiv_name in VOIVODESHIPS.items():
-                            if voiv_name.lower() == province_name.lower():
-                                voivodeship = voiv_code
-                                _LOGGER.debug(
-                                    "Auto-discovery: detected voivodeship from API: %s -> %s",
-                                    province_name, voiv_name
-                                )
-                                break
-
-                    # Fallback to distance-based detection
-                    if not voivodeship:
-                        voivodeship = self._infer_voivodeship()
+                    # Step 2: Use that name to query IMGW API for administrative details
+                    location_details = await reverse_geocode(
+                        session, lat, lon, [nominatim_name]
+                    )
+                    if location_details:
                         _LOGGER.debug(
-                            "Auto-discovery: fallback to distance-based voivodeship: %s",
-                            VOIVODESHIPS.get(voivodeship)
+                            "Auto-discovery: IMGW details - province: %s, district: %s, teryt: %s",
+                            location_details.get("province"),
+                            location_details.get("district"),
+                            location_details.get("teryt"),
                         )
 
-                    # Get powiat code and name directly from API response
-                    teryt_code = location_details.get("teryt")
-                    district_name = location_details.get("district")
+                        # Get voivodeship from API response
+                        province_name = location_details.get("province", "")
+                        if province_name:
+                            for voiv_code, voiv_name in VOIVODESHIPS.items():
+                                if voiv_name.lower() == province_name.lower():
+                                    self._detected_voivodeship = voiv_code
+                                    _LOGGER.debug(
+                                        "Auto-discovery: voivodeship: %s -> %s",
+                                        province_name, voiv_name,
+                                    )
+                                    break
 
-                    if teryt_code and district_name:
-                        self._detected_powiat_code = teryt_code
-                        self._detected_powiat_name = district_name
-                        _LOGGER.debug(
-                            "Auto-discovery: detected powiat from API: %s (%s)",
-                            district_name, teryt_code
-                        )
+                        # Get powiat code and name
+                        teryt_code = location_details.get("teryt")
+                        district_name = location_details.get("district")
+                        if teryt_code and district_name:
+                            self._detected_powiat_code = teryt_code
+                            self._detected_powiat_name = district_name
+                            _LOGGER.debug(
+                                "Auto-discovery: powiat: %s (%s)",
+                                district_name, teryt_code,
+                            )
+
+                        # Use IMGW name if more precise
+                        imgw_name = location_details.get("name")
+                        if imgw_name:
+                            self._detected_location_name = imgw_name
             except Exception as e:
-                _LOGGER.debug("Failed to detect powiat: %s", e)
+                _LOGGER.debug("Auto-discovery location detection failed: %s", e)
 
             if not self._nearest_synop and not self._nearest_hydro and not self._nearest_meteo:
                 return self.async_abort(reason="no_stations_nearby")
@@ -251,7 +275,17 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
             if user_input.get("enable_warnings_hydro"):
                 final_config[CONF_ENABLE_WARNINGS_HYDRO] = True
 
-            return self.async_create_entry(title="IMGW Auto-Discovery", data=final_config)
+            # Weather forecast
+            if user_input.get(CONF_ENABLE_WEATHER_FORECAST):
+                final_config[CONF_ENABLE_WEATHER_FORECAST] = True
+                final_config[CONF_FORECAST_LAT] = self.hass.config.latitude
+                final_config[CONF_FORECAST_LON] = self.hass.config.longitude
+
+            # Location name
+            loc_name = self._detected_location_name or "IMGW Auto-Discovery"
+            final_config[CONF_LOCATION_NAME] = loc_name
+
+            return self.async_create_entry(title=loc_name, data=final_config)
 
         # Build schema based on available stations
         schema = {}
@@ -272,6 +306,9 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
         # Powiat filtering checkbox (only if powiat was detected)
         if self._detected_powiat_code and self._detected_powiat_name:
             schema[vol.Optional(CONF_USE_POWIAT_FOR_WARNINGS, default=False)] = BooleanSelector()
+
+        # Weather forecast
+        schema[vol.Optional(CONF_ENABLE_WEATHER_FORECAST, default=False)] = BooleanSelector()
 
         return self.async_show_form(step_id="auto_options", data_schema=vol.Schema(schema))
 
@@ -347,6 +384,11 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                         "Detected powiat from API: %s (%s)",
                         district_name, teryt_code
                     )
+
+                # Store the most precise location name from geocoding
+                loc_name = location_details.get("name")
+                if loc_name:
+                    self._detected_location_name = loc_name
 
                 return await self.async_step_manual_find_stations()
             else:
@@ -455,44 +497,17 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             synop_data, hydro_data, meteo_data = results
 
-            def find_nearest_synop(stations):
-                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
-                for s in stations:
-                    sid = str(s.get("id_stacji"))
-                    coords = SYNOP_STATIONS.get(sid)
-                    if not coords:
-                        continue
-                    d = haversine(lat, lon, coords[0], coords[1])
-                    if d < dist_min:
-                        dist_min, nearest = d, sid
-                return nearest
-
-            def find_nearest(stations, lat_key, lon_key, id_key):
-                nearest, dist_min = None, DEFAULT_MAX_DISTANCE
-                for s in stations:
-                    try:
-                        s_lat = float(s.get(lat_key) or s.get("szerokosc") or 0)
-                        s_lon = float(s.get(lon_key) or s.get("dlugosc") or 0)
-                        if not s_lat or not s_lon:
-                            continue
-                        d = haversine(lat, lon, s_lat, s_lon)
-                        if d < dist_min:
-                            dist_min, nearest = d, s.get(id_key)
-                    except (ValueError, TypeError):
-                        continue
-                return nearest
-
             # Find nearest for each type independently
-            self._nearest_synop = find_nearest_synop(synop_data)
-            self._nearest_hydro = find_nearest(hydro_data, "lat", "lon", "id_stacji")
-            self._nearest_meteo = find_nearest(meteo_data, "lat", "lon", "kod_stacji")
+            self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
+            self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "lat", "lon", "id_stacji")
+            self._nearest_meteo = _find_nearest_station(meteo_data, lat, lon, "lat", "lon", "kod_stacji")
 
             if not self._nearest_synop and not self._nearest_hydro and not self._nearest_meteo:
                 errors["base"] = "no_stations_nearby"
                 return self.async_show_form(
                     step_id="manual_start",
                     data_schema=vol.Schema({
-                        vol.Required("location_name", default=location_name): TextSelector(
+                        vol.Required("location_name", default=self._data.get("location_name", "")): TextSelector(
                             TextSelectorConfig(type="text", autocomplete="off")
                         )
                     }),
@@ -602,7 +617,17 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
             if user_input.get("enable_warnings_hydro"):
                 final_config[CONF_ENABLE_WARNINGS_HYDRO] = True
 
-            location_name = self._data.get("location_name", "Manual Setup")
+            # Weather forecast
+            if user_input.get(CONF_ENABLE_WEATHER_FORECAST):
+                final_config[CONF_ENABLE_WEATHER_FORECAST] = True
+                lat, lon = self._location_coords
+                final_config[CONF_FORECAST_LAT] = lat
+                final_config[CONF_FORECAST_LON] = lon
+
+            # Location name
+            location_name = self._detected_location_name or self._data.get("location_name", "Manual Setup")
+            final_config[CONF_LOCATION_NAME] = location_name
+
             return self.async_create_entry(title=location_name, data=final_config)
 
         # Build schema based on available stations
@@ -624,6 +649,9 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
         # Powiat filtering checkbox (only if powiat was detected)
         if self._detected_powiat_code and self._detected_powiat_name:
             schema[vol.Optional(CONF_USE_POWIAT_FOR_WARNINGS, default=False)] = BooleanSelector()
+
+        # Weather forecast
+        schema[vol.Optional(CONF_ENABLE_WEATHER_FORECAST, default=False)] = BooleanSelector()
 
         return self.async_show_form(step_id="manual_options", data_schema=vol.Schema(schema))
 
@@ -684,15 +712,54 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class ImgwPibMonitorOptionsFlow(OptionsFlow):
     """Handle options flow."""
+
     def __init__(self, config_entry: ConfigEntry) -> None:
         self._config_entry = config_entry
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Manage options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-        return self.async_show_form(step_id="init", data_schema=vol.Schema({
-            vol.Required(
-                CONF_UPDATE_INTERVAL, 
-                default=self._config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL))
-        }))
+            # Merge new options into existing config entry data
+            new_data = {**self._config_entry.data}
+            new_data[CONF_UPDATE_INTERVAL] = user_input[CONF_UPDATE_INTERVAL]
+
+            # Handle weather forecast toggle
+            enable_forecast = user_input.get(CONF_ENABLE_WEATHER_FORECAST, False)
+            new_data[CONF_ENABLE_WEATHER_FORECAST] = enable_forecast
+
+            if enable_forecast and CONF_FORECAST_LAT not in new_data:
+                # First time enabling forecast — use HA coordinates as fallback
+                new_data[CONF_FORECAST_LAT] = self.hass.config.latitude
+                new_data[CONF_FORECAST_LON] = self.hass.config.longitude
+
+            self.hass.config_entries.async_update_entry(
+                self._config_entry, data=new_data
+            )
+            return self.async_create_entry(title="", data={})
+
+        current_forecast = self._config_entry.data.get(
+            CONF_ENABLE_WEATHER_FORECAST, False
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_UPDATE_INTERVAL,
+                        default=self._config_entry.data.get(
+                            CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+                        ),
+                    ): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL),
+                    ),
+                    vol.Optional(
+                        CONF_ENABLE_WEATHER_FORECAST,
+                        default=current_forecast,
+                    ): BooleanSelector(),
+                }
+            ),
+        )

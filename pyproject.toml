@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+markers = [
+    "contract: tests that hit live API endpoints to verify response schemas",
+]
+filterwarnings = [
+    "ignore:Inheritance class HomeAssistantApplication:DeprecationWarning",
+]
