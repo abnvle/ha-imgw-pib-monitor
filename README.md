@@ -1,6 +1,6 @@
 # IMGW-PIB Monitor dla Home Assistant
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=popout&logo=homeassistantcommunitystore)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=popout&logo=homeassistantcommunitystore)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/abnvle/ha-imgw-pib-monitor?style=popout&logo=github)](https://github.com/abnvle/ha-imgw-pib-monitor/releases)
 [![Downloads](https://img.shields.io/github/downloads/abnvle/ha-imgw-pib-monitor/total?style=popout&logo=github)](https://github.com/abnvle/ha-imgw-pib-monitor/releases)
 [![License: MIT](https://img.shields.io/github/license/abnvle/ha-imgw-pib-monitor?style=popout&logo=opensourceinitiative)](https://github.com/abnvle/ha-imgw-pib-monitor/blob/main/LICENSE)
