@@ -165,8 +165,10 @@ class TestImgwPublicApiContract:
 
     @pytest.mark.asyncio
     async def test_warnings_meteo_response_schema(self, http_session):
-        """GET /warningsmeteo returns a list (possibly empty).
+        """GET /warningsmeteo returns a list or a 'no products' dict.
 
+        The API returns ``{"status": false, "message": "No products were found"}``
+        when there are no active warnings — this is a valid empty response.
         When warnings exist, each item must have the keys used by
         _parse_warnings_meteo.
         """
@@ -182,10 +184,20 @@ class TestImgwPublicApiContract:
         async with http_session.get(
             f"{IMGW_BASE}/warningsmeteo", timeout=REQUEST_TIMEOUT
         ) as resp:
+            # API returns 404 when no warnings are active
+            if resp.status == 404:
+                pytest.skip("No active meteorological warnings (API returned 404) — schema cannot be verified")
             assert resp.status == 200, f"Expected 200, got {resp.status}"
             data = await resp.json()
 
-        assert isinstance(data, list), f"Expected list, got {type(data).__name__}"
+        # API may also return a dict with "No products were found" message
+        if isinstance(data, dict):
+            assert data.get("message") == "No products were found", (
+                f"Unexpected dict response: {data}"
+            )
+            pytest.skip("No active meteorological warnings (API returned 'No products') — schema cannot be verified")
+
+        assert isinstance(data, list), f"Expected list or dict, got {type(data).__name__}"
 
         if len(data) == 0:
             pytest.skip("No active meteorological warnings — schema cannot be verified")
@@ -202,8 +214,10 @@ class TestImgwPublicApiContract:
 
     @pytest.mark.asyncio
     async def test_warnings_hydro_response_schema(self, http_session):
-        """GET /warningshydro returns a list (possibly empty).
+        """GET /warningshydro returns a list or a 'no products' dict.
 
+        The API returns ``{"status": false, "message": "No products were found"}``
+        when there are no active warnings — this is a valid empty response.
         When warnings exist, each item must have the keys used by
         _parse_warnings_hydro.
         """
@@ -220,10 +234,20 @@ class TestImgwPublicApiContract:
         async with http_session.get(
             f"{IMGW_BASE}/warningshydro", timeout=REQUEST_TIMEOUT
         ) as resp:
+            # API returns 404 when no warnings are active
+            if resp.status == 404:
+                pytest.skip("No active hydrological warnings (API returned 404) — schema cannot be verified")
             assert resp.status == 200, f"Expected 200, got {resp.status}"
             data = await resp.json()
 
-        assert isinstance(data, list), f"Expected list, got {type(data).__name__}"
+        # API may also return a dict with "No products were found" message
+        if isinstance(data, dict):
+            assert data.get("message") == "No products were found", (
+                f"Unexpected dict response: {data}"
+            )
+            pytest.skip("No active hydrological warnings (API returned 'No products') — schema cannot be verified")
+
+        assert isinstance(data, list), f"Expected list or dict, got {type(data).__name__}"
 
         if len(data) == 0:
             pytest.skip("No active hydrological warnings — schema cannot be verified")
