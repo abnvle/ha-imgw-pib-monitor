@@ -52,6 +52,8 @@ SAMPLE_HYDRO_DATA = [
         "przeplyw_data": "2024-01-15 12:00:00",
         "zjawisko_lodowe": "0",
         "zjawisko_lodowe_data_pomiaru": "2024-01-15 12:00:00",
+        "zjawisko_zarastania": "0",
+        "zjawisko_zarastania_data_pomiaru": "2024-01-15 12:00:00",
     },
 ]
 
@@ -144,6 +146,8 @@ SAMPLE_COORDINATOR_DATA = {
             "flow_date": "2024-01-15 12:00:00",
             "ice_phenomenon": 0,
             "ice_phenomenon_date": "2024-01-15 12:00:00",
+            "overgrowth": 0,
+            "overgrowth_date": "2024-01-15 12:00:00",
             "distance": 2.3,
         },
     },

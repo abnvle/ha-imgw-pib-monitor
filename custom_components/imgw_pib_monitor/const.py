@@ -19,6 +19,21 @@ API_ENDPOINT_METEO: Final = f"{API_BASE_URL}/meteo"
 API_ENDPOINT_WARNINGS_METEO: Final = f"{API_BASE_URL}/warningsmeteo"
 API_ENDPOINT_WARNINGS_HYDRO: Final = f"{API_BASE_URL}/warningshydro"
 
+# Hydro-back API (extended hydrological data: alarm levels, trends)
+API_HYDRO_BACK_BASE_URL: Final = "https://hydro-back.imgw.pl"
+API_HYDRO_BACK_STATION_URL: Final = f"{API_HYDRO_BACK_BASE_URL}/station/hydro/status"
+
+# Trend code mapping from hydro-back API
+HYDRO_TREND_MAP: Final[dict[int, str]] = {
+    -30: "strongly_falling",
+    -20: "falling",
+    -10: "slightly_falling",
+    0: "stable",
+    10: "stable",
+    20: "rising",
+    30: "strongly_rising",
+}
+
 # Config keys
 CONF_STATION_ID: Final = "station_id"
 CONF_STATION_NAME: Final = "station_name"
@@ -41,6 +56,7 @@ CONF_SELECTED_HYDRO: Final = "selected_hydro"
 CONF_SELECTED_METEO: Final = "selected_meteo"
 CONF_ENABLE_WARNINGS_METEO: Final = "enable_warnings_meteo"
 CONF_ENABLE_WARNINGS_HYDRO: Final = "enable_warnings_hydro"
+CONF_ENABLE_ENHANCED_WARNINGS_METEO: Final = "enable_enhanced_warnings_meteo"
 
 # Data types (Legacy & Internal Mapping)
 DATA_TYPE_SYNOP: Final = "synop"
@@ -48,6 +64,7 @@ DATA_TYPE_HYDRO: Final = "hydro"
 DATA_TYPE_METEO: Final = "meteo"
 DATA_TYPE_WARNINGS_METEO: Final = "warnings_meteo"
 DATA_TYPE_WARNINGS_HYDRO: Final = "warnings_hydro"
+DATA_TYPE_WARNINGS_METEO_ENHANCED: Final = "warnings_meteo_enhanced"
 
 DATA_TYPES: Final = {
     DATA_TYPE_SYNOP: "Dane synoptyczne",
@@ -55,6 +72,7 @@ DATA_TYPES: Final = {
     DATA_TYPE_METEO: "Dane meteorologiczne",
     DATA_TYPE_WARNINGS_METEO: "Ostrzeżenia meteorologiczne",
     DATA_TYPE_WARNINGS_HYDRO: "Ostrzeżenia hydrologiczne",
+    DATA_TYPE_WARNINGS_METEO_ENHANCED: "Ostrzeżenia meteorologiczne (rozszerzone)",
 }
 
 # Default update intervals (minutes)
@@ -180,6 +198,31 @@ CONF_LOCATION_NAME: Final = "location_name"
 # Forecast API (IMGW Proxy)
 FORECAST_API_URL: Final = "https://imgw-api-proxy.evtlab.pl"
 FORECAST_UPDATE_INTERVAL: Final = 600  # 10 minutes, in seconds
+
+# Enhanced meteo warnings API (meteo.imgw.pl)
+API_METEO_IMGW_OSMET_URL: Final = (
+    "https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt"
+)
+
+# Phenomenon codes from meteo.imgw.pl with Polish names and MDI icons
+PHENOMENON_CODES: Final[dict[str, tuple[str, str]]] = {
+    "BU": ("Burze", "mdi:weather-lightning"),
+    "BG": ("Burze z gradem", "mdi:weather-hail"),
+    "IS": ("Intensywne opady śniegu", "mdi:weather-snowy-heavy"),
+    "ID": ("Intensywne opady deszczu", "mdi:weather-pouring"),
+    "MS": ("Mgła osadzająca szadź", "mdi:weather-fog"),
+    "OB": ("Oblodzenie", "mdi:sun-snowflake-variant"),
+    "OM": ("Opady marznące", "mdi:weather-snowy-rainy"),
+    "OS": ("Opady śniegu", "mdi:weather-snowy"),
+    "PR": ("Przymrozki", "mdi:snowflake-thermometer"),
+    "RO": ("Roztopy", "mdi:snowflake-melt"),
+    "DB": ("Silny deszcz z burzami", "mdi:weather-lightning-rainy"),
+    "MG": ("Gęsta mgła", "mdi:weather-hazy"),
+    "MR": ("Silny mróz", "mdi:snowflake-alert"),
+    "SW": ("Silny wiatr", "mdi:weather-windy"),
+    "UP": ("Upał", "mdi:weather-sunny-alert"),
+    "ZZ": ("Zawieje zamiecie śnieżne", "mdi:weather-dust"),
+}
 
 # IMGW icon → HA condition mapping
 ICON_TO_CONDITION: Final = {

@@ -17,6 +17,7 @@
           "add_hydro": "Add hydrological data (river levels)",
           "enable_warnings_meteo": "Enable meteorological warnings",
           "enable_warnings_hydro": "Enable hydrological warnings",
+          "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filter warnings for my county only",
           "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
         }
@@ -44,6 +45,7 @@
           "add_hydro": "Add hydrological data (river levels)",
           "enable_warnings_meteo": "Enable meteorological warnings",
           "enable_warnings_hydro": "Enable hydrological warnings",
+          "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filter warnings for my county only",
           "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
         }
@@ -87,7 +89,9 @@
         "title": "Settings",
         "data": {
           "update_interval": "Update interval (minutes)",
-          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
+          "use_powiat_for_warnings": "Filter warnings for my county only",
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)",
+          "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)"
         }
       }
     }
@@ -114,6 +118,38 @@
       "hydro_flow": { "name": "Water flow{station_suffix}" },
       "hydro_water_temperature": { "name": "Water temperature{station_suffix}" },
       "hydro_ice_phenomenon": { "name": "Ice phenomenon{station_suffix}" },
+      "hydro_overgrowth": { "name": "Overgrowth phenomenon{station_suffix}" },
+      "hydro_water_level_state": {
+        "name": "Water level state{station_suffix}",
+        "state": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High",
+          "warning": "Warning",
+          "alarm": "Alarm"
+        }
+      },
+      "hydro_water_level_trend": {
+        "name": "Water level trend{station_suffix}",
+        "state": {
+          "strongly_falling": "Strongly falling",
+          "falling": "Falling",
+          "slightly_falling": "Slightly falling",
+          "stable": "Stable",
+          "rising": "Rising",
+          "strongly_rising": "Strongly rising"
+        }
+      },
+      "hydro_warning_remaining": { "name": "Warning level remaining{station_suffix}" },
+      "hydro_alarm_remaining": { "name": "Alarm level remaining{station_suffix}" },
+      "hydro_water_level_alarm": {
+        "name": "Water level alarm{station_suffix}",
+        "state": {
+          "none": "None",
+          "warning": "Warning",
+          "alarm": "Alarm"
+        }
+      },
       "hydro_station_id": { "name": "Hydro station ID{station_suffix}" },
       "hydro_distance": { "name": "Hydro station distance{station_suffix}" },
       "meteo_air_temperature": { "name": "Air temperature{station_suffix}" },
@@ -148,7 +184,53 @@
           "online": "Online",
           "offline": "Offline"
         }
-      }
+      },
+      "enh_warnings_present_count": { "name": "Enhanced alerts (published){station_suffix}" },
+      "enh_warnings_active_count": { "name": "Enhanced alerts (active){station_suffix}" },
+      "enh_warnings_present_max_level": { "name": "Max enhanced alert level (published){station_suffix}" },
+      "enh_warnings_active_max_level": { "name": "Max enhanced alert level (active){station_suffix}" },
+      "enh_warnings_present_phenomena": { "name": "Enhanced phenomena (published){station_suffix}" },
+      "enh_warnings_active_phenomena": { "name": "Enhanced phenomena (active){station_suffix}" }
+    },
+    "binary_sensor": {
+      "enh_warning_level_1_present": { "name": "Level 1 warning (published){station_suffix}" },
+      "enh_warning_level_1_active": { "name": "Level 1 warning (active){station_suffix}" },
+      "enh_warning_level_2_present": { "name": "Level 2 warning (published){station_suffix}" },
+      "enh_warning_level_2_active": { "name": "Level 2 warning (active){station_suffix}" },
+      "enh_warning_level_3_present": { "name": "Level 3 warning (published){station_suffix}" },
+      "enh_warning_level_3_active": { "name": "Level 3 warning (active){station_suffix}" },
+      "enh_warning_bu_present": { "name": "Thunderstorms (published){station_suffix}" },
+      "enh_warning_bu_active": { "name": "Thunderstorms (active){station_suffix}" },
+      "enh_warning_bg_present": { "name": "Hail storms (published){station_suffix}" },
+      "enh_warning_bg_active": { "name": "Hail storms (active){station_suffix}" },
+      "enh_warning_is_present": { "name": "Heavy snow (published){station_suffix}" },
+      "enh_warning_is_active": { "name": "Heavy snow (active){station_suffix}" },
+      "enh_warning_id_present": { "name": "Heavy rain (published){station_suffix}" },
+      "enh_warning_id_active": { "name": "Heavy rain (active){station_suffix}" },
+      "enh_warning_ms_present": { "name": "Rime fog (published){station_suffix}" },
+      "enh_warning_ms_active": { "name": "Rime fog (active){station_suffix}" },
+      "enh_warning_ob_present": { "name": "Icing (published){station_suffix}" },
+      "enh_warning_ob_active": { "name": "Icing (active){station_suffix}" },
+      "enh_warning_om_present": { "name": "Freezing precipitation (published){station_suffix}" },
+      "enh_warning_om_active": { "name": "Freezing precipitation (active){station_suffix}" },
+      "enh_warning_os_present": { "name": "Snowfall (published){station_suffix}" },
+      "enh_warning_os_active": { "name": "Snowfall (active){station_suffix}" },
+      "enh_warning_pr_present": { "name": "Frost (published){station_suffix}" },
+      "enh_warning_pr_active": { "name": "Frost (active){station_suffix}" },
+      "enh_warning_ro_present": { "name": "Thaw (published){station_suffix}" },
+      "enh_warning_ro_active": { "name": "Thaw (active){station_suffix}" },
+      "enh_warning_db_present": { "name": "Heavy rain with storms (published){station_suffix}" },
+      "enh_warning_db_active": { "name": "Heavy rain with storms (active){station_suffix}" },
+      "enh_warning_mg_present": { "name": "Dense fog (published){station_suffix}" },
+      "enh_warning_mg_active": { "name": "Dense fog (active){station_suffix}" },
+      "enh_warning_mr_present": { "name": "Severe frost (published){station_suffix}" },
+      "enh_warning_mr_active": { "name": "Severe frost (active){station_suffix}" },
+      "enh_warning_sw_present": { "name": "Strong wind (published){station_suffix}" },
+      "enh_warning_sw_active": { "name": "Strong wind (active){station_suffix}" },
+      "enh_warning_up_present": { "name": "Heat wave (published){station_suffix}" },
+      "enh_warning_up_active": { "name": "Heat wave (active){station_suffix}" },
+      "enh_warning_zz_present": { "name": "Blizzard (published){station_suffix}" },
+      "enh_warning_zz_active": { "name": "Blizzard (active){station_suffix}" }
     }
   }
 }

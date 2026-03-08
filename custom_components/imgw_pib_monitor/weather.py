@@ -155,8 +155,8 @@ class ImgwWeatherEntity(CoordinatorEntity, WeatherEntity):
             "icon_imgw": current.get("icon"),
             "sunrise": sun.get("Sunrise"),
             "sunset": sun.get("Sunset"),
-            "hourly": data.get("hourly", []),
-            "daily": data.get("daily", []),
+            "hourly_count": len(data.get("hourly", [])),
+            "daily_count": len(data.get("daily", [])),
         }
 
     async def async_forecast_daily(self) -> list[Forecast]:

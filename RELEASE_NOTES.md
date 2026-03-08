@@ -1,72 +1,56 @@
-# 🚀 IMGW-PIB Monitor v2.0.0
+# IMGW-PIB Monitor v2.1.0
 
-Pełna przebudowa integracji. Nowa architektura, nowe funkcje, ostrzeżenia pogodowe i prognoza pogody.
-
----
-
-## ✨ Nowe funkcje
-
-### Architektura
-- **Globalny koordynator** — centralne pobieranie danych z rate limiting i deduplikacją zapytań. Wiele instancji integracji współdzieli jedno połączenie z API IMGW.
-- **Koordynator instancji** — każda lokalizacja przetwarza tylko swoje dane, filtrowane po stacjach i regionach.
-- **Migracja konfiguracji** — automatyczna migracja wpisów z v1.x do nowego formatu (wersja konfiguracji 8).
-
-### Konfiguracja
-- **Dwa tryby konfiguracji** — automatyczny (GPS) i manualny (wyszukiwanie po nazwie miejscowości).
-- **Geokodowanie** — wyszukiwanie lokalizacji z podpowiedziami (gmina, powiat, województwo) przez Nominatim + IMGW API.
-- **Auto-Discovery** — automatyczne wykrywanie i aktualizacja najbliższych stacji pomiarowych na podstawie lokalizacji HA.
-- **Options Flow** — zmiana interwału aktualizacji (5-120 min) i zarządzanie prognozą pogody bez rekonfiguracji.
-
-### Dane i sensory
-- **5 źródeł danych** — synoptyczne (SYNOP), hydrologiczne, meteorologiczne, ostrzeżenia meteo, ostrzeżenia hydro.
-- **Do 40 sensorów** — temperatura, wiatr, wilgotność, ciśnienie, stan wody, przepływ, zjawiska lodowe, odległość do stacji i więcej.
-- **Ostrzeżenia meteorologiczne** — aktywne alerty z filtrowaniem po województwie lub powiecie (kody TERYT).
-- **Ostrzeżenia hydrologiczne** — alerty powodziowe z filtrowaniem po powiecie.
-- **Encja pogodowa** — opcjonalna prognoza dzienna i godzinowa (platforma `weather`).
-- **Obliczanie odległości** — każdy sensor zawiera dystans do stacji pomiarowej.
-- **Wiele instancji** — możliwość dodania integracji wielokrotnie dla różnych lokalizacji.
-
-### Tłumaczenia
-- Pełne tłumaczenia PL i EN dla interfejsu konfiguracji oraz nazw sensorów.
+Ostrzeżenia rozszerzone z meteo.imgw.pl, wzbogacone dane hydrologiczne z hydro-back API oraz poprawki bezpieczeństwa i stabilności.
 
 ---
 
-## 🐛 Poprawki błędów
+## Nowe funkcje
 
-- **Opisy ostrzeżeń** — sensory „Treść ostrzeżenia" i „Opis ostrzeżenia hydro" pokazują teraz opisy **wszystkich** aktywnych ostrzeżeń (połączone separatorem ` | `), a nie tylko najpoważniejszego.
-- **Nazwy zdarzeń** — sensory „Zdarzenie meteorologiczne" i „Zdarzenie hydrologiczne" wyświetlają nazwy wszystkich aktywnych ostrzeżeń.
-- **Config flow crash** — naprawiono niezdefiniowaną zmienną `location_name` w kroku wyszukiwania stacji (tryb manualny), który powodował crash przy braku stacji w pobliżu.
-- **Precyzja zmiennoprzecinkowa** — poprawiono wyświetlanie wartości sensorów z nadmierną precyzją.
+### Ostrzeżenia rozszerzone (meteo.imgw.pl)
+- **Nowe API** — ostrzeżenia z `meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` (niezależne od standardowego API ostrzeżeń).
+- **6 nowych sensorów** — liczba ostrzeżeń (obecne / aktywne), najwyższy stopień, lista kodów zjawisk.
+- **38 binary sensorów** — per poziom (1/2/3) x stan (obecne/aktywne) + per zjawisko (16 kodów) x stan.
+- **16 zjawisk meteorologicznych** — burze, grad, intensywne opady śniegu/deszczu, mgła, oblodzenie, opady marznące, przymrozki, roztopy, silny wiatr, upał i inne.
+- **Atrybuty** — poziom, prawdopodobieństwo, treść SMS, daty ważności.
+- **Nowa platforma** — `binary_sensor` (dodana obok `sensor` i `weather`).
 
----
+### Wzbogacone dane hydrologiczne (hydro-back API)
+- **Nowe API** — dane z `hydro-back.imgw.pl/station/hydro/status` (poziomy alarmowe, trendy).
+- **6 nowych sensorów hydro**:
+  - Stan poziomu wody (enum: low, medium, high, warning, alarm)
+  - Trend poziomu wody (enum: strongly_falling, falling, slightly_falling, stable, rising, strongly_rising)
+  - Ile cm do poziomu ostrzegawczego
+  - Ile cm do poziomu alarmowego
+  - Status alarmu wodnego (enum: none, warning, alarm)
+  - Zjawisko zarastania
+- **Atrybuty sensora stanu wody** — poziom alarmowy i ostrzegawczy jako dodatkowe atrybuty.
 
-## ⚡ Wydajność
-
-- **Usunięto `force_update`** — sensory nie wymuszają już zapisu do bazy danych przy każdym odświeżeniu, gdy wartość się nie zmieniła. Znacząco zmniejsza obciążenie bazy HA.
-- **Rate limiting** — semafor z limitem 2 równoczesnych zapytań + 0.2s przerwy między wywołaniami API.
-- **Deduplikacja** — współbieżne odświeżenia koordynatorów współdzielą wynik jednego zapytania (okno 30s).
-
----
-
-## 🛡️ Jakość kodu
-
-- **Węższe łapanie wyjątków** — `except Exception` zamieniono na `except (ImgwApiError, asyncio.TimeoutError)` w globalnym koordynatorze. Prawdziwe bugi nie będą już cicho połykane.
-- **Walidacja odpowiedzi API** — dodano logowanie ostrzeżeń gdy API IMGW zwróci nieoczekiwany typ danych.
-- **Wymaganie wersji HA** — dodano `"homeassistant": "2024.1.0"` do manifestu.
-- **Eliminacja duplikacji** — wyekstrahowano wspólne funkcje wyszukiwania stacji w config flow.
-
----
-
-## 🧪 Testy i CI/CD
-
-- Pełny zestaw testów pytest: API, config flow, koordynator, sensory, stałe, utils, pogoda.
-- Workflow GitHub Actions: HACS validation, hassfest, testy automatyczne.
+### Filtrowanie po powiecie
+- **Przełącznik w Options Flow** — możliwość włączenia/wyłączenia filtrowania ostrzeżeń na poziomie powiatu bez rekonfiguracji.
+- **Automatyczne wykrywanie powiatu** — podczas migracji z v2.0.0 system sam wykrywa powiat na podstawie lokalizacji.
 
 ---
 
-## ⬆️ Aktualizacja z v1.x
+## Poprawki bezpieczeństwa i stabilności
 
-Aktualizacja jest automatyczna. Wpisy konfiguracji zostaną zmigrowane do nowego formatu przy pierwszym uruchomieniu. Nie jest wymagana żadna ręczna interwencja.
+- **Bezpieczne parsowanie ostrzeżeń meteo** — `int()` w `_parse_warnings_meteo` zabezpieczone `try/except` (wcześniej crash przy nietypowych danych z API).
+- **Poprawny typ domyślny** — `_fetch_with_limit` zwraca `{}` zamiast `[]` dla enhanced warnings przy błędzie API.
+- **Warunkowe pobieranie** — globalny koordynator pobiera ostrzeżenia rozszerzone tylko gdy jakakolwiek instancja ich potrzebuje.
+- **Tworzenie encji bez danych** — binary sensory i sensory `always_create` tworzą się nawet gdy API jest chwilowo niedostępne przy starcie.
+- **Reużywalna sesja HTTP** — hydro-back API używa jednej sesji zamiast tworzenia nowej przy każdym zapytaniu.
+- **Poprawny cleanup** — przy usunięciu ostatniej instancji sesje API są zamykane, globalny koordynator usuwany.
+- **Korekta interwału** — interwał globalnego koordynatora jest korygowany w górę po usunięciu instancji z najkrótszym interwałem.
+- **Zmniejszony bloat bazy** — atrybuty `hourly`/`daily` encji pogodowej zastąpione `hourly_count`/`daily_count` (dane dostępne przez serwis forecast).
+- **Zaktualizowane User-Agent** — nagłówki HTTP zaktualizowane do wersji 2.1.0.
+- **Poprawne URL konfiguracji** — `configuration_url` urządzeń wskazuje teraz na repozytorium GitHub.
+
+---
+
+## Migracja
+
+- **Wersja konfiguracji**: 8 → 10 (automatyczna migracja, brak ręcznej interwencji).
+- **v8 → v9**: dodanie flagi `enable_enhanced_warnings_meteo`.
+- **v9 → v10**: dodanie flagi `use_powiat_for_warnings` + automatyczne wykrycie powiatu.
 
 ---
 
