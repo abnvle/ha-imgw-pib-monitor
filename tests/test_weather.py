@@ -149,11 +149,11 @@ class TestWeatherExtraAttributes:
         attrs = entity.extra_state_attributes
         assert attrs["icon_imgw"] == "n5z00d"
 
-    def test_includes_hourly_and_daily(self):
+    def test_includes_hourly_and_daily_counts(self):
         entity = _make_weather_entity()
         attrs = entity.extra_state_attributes
-        assert len(attrs["hourly"]) == 2
-        assert len(attrs["daily"]) == 3
+        assert attrs["hourly_count"] == 2
+        assert attrs["daily_count"] == 3
 
 
 # ── Daily forecast ────────────────────────────────────────────

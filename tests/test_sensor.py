@@ -106,6 +106,28 @@ class TestHydroSensorValues:
         sensor = next(s for s in HYDRO_SENSORS if s.key == "ice_phenomenon")
         assert sensor.value_fn(self.data) == 0
 
+    def test_overgrowth(self):
+        sensor = next(s for s in HYDRO_SENSORS if s.key == "overgrowth")
+        assert sensor.value_fn(self.data) == 0
+
+    def test_water_level_alarm_none_when_no_thresholds(self):
+        sensor = next(s for s in HYDRO_SENSORS if s.key == "water_level_alarm")
+        assert sensor.value_fn(self.data) == "none"
+
+    def test_water_level_alarm_warning(self):
+        sensor = next(s for s in HYDRO_SENSORS if s.key == "water_level_alarm")
+        data = {**self.data, "warning_level": 200, "alarm_level": 400}
+        assert sensor.value_fn(data) == "warning"
+
+    def test_water_level_alarm_alarm(self):
+        sensor = next(s for s in HYDRO_SENSORS if s.key == "water_level_alarm")
+        data = {**self.data, "warning_level": 200, "alarm_level": 250}
+        assert sensor.value_fn(data) == "alarm"
+
+    def test_water_level_alarm_none_when_no_water_level(self):
+        sensor = next(s for s in HYDRO_SENSORS if s.key == "water_level_alarm")
+        assert sensor.value_fn({}) is None
+
 
 class TestMeteoSensorValues:
     """Test that METEO sensor value_fn extracts correct data."""
@@ -255,7 +277,7 @@ class TestSensorDescriptionIntegrity:
         assert len(SYNOP_SENSORS) == 8
 
     def test_hydro_sensor_count(self):
-        assert len(HYDRO_SENSORS) == 6
+        assert len(HYDRO_SENSORS) == 12
 
     def test_meteo_sensor_count(self):
         assert len(METEO_SENSORS) == 10

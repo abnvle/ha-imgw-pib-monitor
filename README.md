@@ -20,8 +20,8 @@ Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Mete
 
 - **Dwa tryby konfiguracji** - automatyczny (GPS) lub manualny (wpisanie lokalizacji)
 - **Config Flow UI** - konfiguracja przez interfejs, zero YAML
-- **5 źródeł danych** - synoptyczne, hydrologiczne, meteorologiczne, ostrzeżenia meteo, ostrzeżenia hydro
-- **Do 40 sensorów** - temperatura, wiatr, wilgotność, ciśnienie, stan wody, przepływ, ostrzeżenia i inne
+- **7 źródeł danych** - synoptyczne, hydrologiczne, meteorologiczne, ostrzeżenia meteo, ostrzeżenia hydro, ostrzeżenia rozszerzone (meteo.imgw.pl), dane rozszerzone hydro (hydro-back)
+- **Do 90 encji** - temperatura, wiatr, wilgotność, ciśnienie, stan wody, przepływ, trendy, alarmy, ostrzeżenia, binary sensory zjawisk i inne
 - **Encja pogodowa** - prognoza pogody (dzienna i godzinowa) z IMGW-PIB jako encja weather
 - **Wiele instancji** - możliwość dodania integracji wielokrotnie dla różnych lokalizacji
 - **Tłumaczenia PL/EN**
@@ -38,6 +38,8 @@ Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Mete
 - **Options Flow** - zmiana interwału aktualizacji i włączanie/wyłączanie prognozy pogody w dowolnym momencie (5-120 minut)
 - **Współrzędne geograficzne** - wszystkie sensory zawierają współrzędne stacji w atrybutach
 - **Prognoza pogody** - opcjonalna encja pogodowa z prognozą dzienną i godzinową (dane z IMGW API Proxy)
+- **Ostrzeżenia rozszerzone** - szczegółowe ostrzeżenia z meteo.imgw.pl z 16 typami zjawisk (burze, grad, mróz, upał itp.) jako binary sensory
+- **Wzbogacone dane hydro** - trend poziomu wody, odległość do poziomu alarmowego/ostrzegawczego, stan wody z hydro-back API
 
 ## Zrzuty ekranu
 
@@ -117,18 +119,26 @@ Funkcje trybu manualnego:
 
 Atrybuty: nazwa stacji, ID stacji, data pomiaru, godzina pomiaru, współrzędne geograficzne, odległość
 
-### Hydrologiczne (6 sensorów)
+### Hydrologiczne (12 sensorów)
 
 | Sensor | Jednostka | Typ |
 |---|---|---|
 | Stan wody | cm | Pomiar |
 | Przepływ wody | m³/s | Pomiar |
 | Temperatura wody | °C | Pomiar |
-| Zjawisko lodowe | kod | Pomiar |
+| Zjawisko lodowe | kod | Informacyjny |
+| Zjawisko zarastania | kod | Informacyjny |
+| Stan poziomu wody | enum (low/medium/high/warning/alarm) | Informacyjny |
+| Trend poziomu wody | enum (strongly_falling/.../strongly_rising) | Informacyjny |
+| Ile do poziomu ostrzegawczego | cm | Pomiar |
+| Ile do poziomu alarmowego | cm | Pomiar |
+| Status alarmu wodnego | enum (none/warning/alarm) | Informacyjny |
 | ID stacji hydro | - | Diagnostyczny |
 | Odległość hydro | km | Diagnostyczny |
 
-Atrybuty: nazwa stacji, ID stacji, nazwa rzeki, województwo, współrzędne geograficzne, odległość, daty pomiarów dla poszczególnych parametrów
+Atrybuty sensora stanu wody: poziom alarmowy (`alarm_level`), poziom ostrzegawczy (`warning_level`).
+
+Dane dodatkowe pobierane z hydro-back API (`hydro-back.imgw.pl`): stan wody (kod stanu), trend, progi alarmowe i ostrzegawcze.
 
 ### Meteorologiczne (10 sensorów)
 
@@ -184,6 +194,48 @@ Sensor "Liczba aktywnych ostrzeżeń" zawiera w atrybucie `warnings` pełną lis
 Ostrzeżenia można filtrować według:
 - Województwa (16 województw)
 - Powiatu (wyszukiwanie w opisie obszarów) - opcjonalne
+
+### Ostrzeżenia rozszerzone — meteo.imgw.pl (6 sensorów + 38 binary sensorów)
+
+Opcjonalne szczegółowe ostrzeżenia meteorologiczne z API meteo.imgw.pl. Niezależne od standardowych ostrzeżeń z danepubliczne.imgw.pl.
+
+#### Sensory (platforma `sensor`)
+
+| Sensor | Opis | Typ |
+|---|---|---|
+| Liczba ostrzeżeń (obecne) | Wszystkie ostrzeżenia (w tym przyszłe) | Pomiar |
+| Liczba ostrzeżeń (aktywne) | Ostrzeżenia obowiązujące teraz | Pomiar |
+| Najwyższy stopień (obecne) | Max poziom wśród obecnych | - |
+| Najwyższy stopień (aktywne) | Max poziom wśród aktywnych | - |
+| Zjawiska (obecne) | Lista kodów zjawisk | - |
+| Zjawiska (aktywne) | Lista kodów aktywnych zjawisk | - |
+
+#### Binary sensory (platforma `binary_sensor`)
+
+**Per stopień** (6 sensorów): dla każdego stopnia (1, 2, 3) — osobny binary sensor dla trybu "obecne" i "aktywne".
+
+**Per zjawisko** (32 sensory): dla każdego z 16 zjawisk meteorologicznych — osobny binary sensor dla trybu "obecne" i "aktywne":
+
+| Kod | Zjawisko | Ikona |
+|---|---|---|
+| BU | Burze | mdi:weather-lightning |
+| BG | Burze z gradem | mdi:weather-hail |
+| IS | Intensywne opady śniegu | mdi:weather-snowy-heavy |
+| ID | Intensywne opady deszczu | mdi:weather-pouring |
+| MS | Mgła osadzająca szadź | mdi:weather-fog |
+| OB | Oblodzenie | mdi:sun-snowflake-variant |
+| OM | Opady marznące | mdi:weather-snowy-rainy |
+| OS | Opady śniegu | mdi:weather-snowy |
+| PR | Przymrozki | mdi:snowflake-thermometer |
+| RO | Roztopy | mdi:snowflake-melt |
+| DB | Silny deszcz z burzami | mdi:weather-lightning-rainy |
+| MG | Gęsta mgła | mdi:weather-hazy |
+| MR | Silny mróz | mdi:snowflake-alert |
+| SW | Silny wiatr | mdi:weather-windy |
+| UP | Upał | mdi:weather-sunny-alert |
+| ZZ | Zawieje zamiecie śnieżne | mdi:weather-dust |
+
+Atrybuty binary sensorów: poziom ostrzeżenia, prawdopodobieństwo, daty ważności, treść SMS.
 
 ### Prognoza pogody (encja weather)
 
@@ -266,7 +318,9 @@ Po dodaniu integracji możesz zmienić ustawienia:
 2. Znajdź wpis **IMGW-PIB Monitor**
 3. Kliknij **KONFIGURUJ**
 4. Ustaw nowy interwał aktualizacji (5-120 minut)
-5. Włącz lub wyłącz prognozę pogody (encja weather)
+5. Włącz lub wyłącz filtrowanie ostrzeżeń po powiecie
+6. Włącz lub wyłącz prognozę pogody (encja weather)
+7. Włącz lub wyłącz ostrzeżenia rozszerzone (meteo.imgw.pl)
 
 Domyślny interwał aktualizacji: 30 minut. Globalny koordynator synchronizuje się z najkrótszym interwałem spośród wszystkich instancji.
 
@@ -497,6 +551,10 @@ Dane pochodzą z publicznego API IMGW-PIB:
 - `https://danepubliczne.imgw.pl/api/data/meteo`
 - `https://danepubliczne.imgw.pl/api/data/warningsmeteo`
 - `https://danepubliczne.imgw.pl/api/data/warningshydro`
+
+Dane rozszerzone:
+- `https://hydro-back.imgw.pl/station/hydro/status` (poziomy alarmowe, trendy hydro)
+- `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` (ostrzeżenia rozszerzone)
 
 Prognoza pogody:
 - `https://imgw-api-proxy.evtlab.pl/forecast`

@@ -20,8 +20,8 @@ Home Assistant integration using public data from IMGW-PIB (Institute of Meteoro
 
 - **Two configuration modes** - automatic (GPS) or manual (enter location)
 - **Config Flow UI** - configuration through interface, zero YAML
-- **5 data sources** - synoptic, hydrological, meteorological, meteo warnings, hydro warnings
-- **Up to 40 sensors** - temperature, wind, humidity, pressure, water level, flow, warnings and more
+- **7 data sources** - synoptic, hydrological, meteorological, meteo warnings, hydro warnings, enhanced warnings (meteo.imgw.pl), extended hydro data (hydro-back)
+- **Up to 90 entities** - temperature, wind, humidity, pressure, water level, flow, trends, alarms, warnings, phenomenon binary sensors and more
 - **Weather entity** - weather forecast (daily and hourly) from IMGW-PIB as a weather entity
 - **Multiple instances** - add integration multiple times for different locations
 - **Polish & English translations**
@@ -38,6 +38,8 @@ Home Assistant integration using public data from IMGW-PIB (Institute of Meteoro
 - **Options Flow** - change update interval and toggle weather forecast at any time (5-120 minutes)
 - **Geographic coordinates** - all sensors contain station coordinates in attributes
 - **Weather forecast** - optional weather entity with daily and hourly forecast (data from IMGW API Proxy)
+- **Enhanced warnings** - detailed warnings from meteo.imgw.pl with 16 phenomenon types (thunderstorms, hail, frost, heat etc.) as binary sensors
+- **Extended hydro data** - water level trend, distance to alarm/warning thresholds, water state from hydro-back API
 
 ## Screenshots
 
@@ -117,18 +119,26 @@ Manual mode features:
 
 Attributes: station name, station ID, measurement date, measurement time, geographic coordinates, distance
 
-### Hydrological (6 sensors)
+### Hydrological (12 sensors)
 
 | Sensor | Unit | Type |
 |---|---|---|
 | Water level | cm | Measurement |
 | Water flow | m³/s | Measurement |
 | Water temperature | °C | Measurement |
-| Ice phenomenon | code | Measurement |
+| Ice phenomenon | code | Informational |
+| Overgrowth phenomenon | code | Informational |
+| Water level state | enum (low/medium/high/warning/alarm) | Informational |
+| Water level trend | enum (strongly_falling/.../strongly_rising) | Informational |
+| Distance to warning level | cm | Measurement |
+| Distance to alarm level | cm | Measurement |
+| Water level alarm status | enum (none/warning/alarm) | Informational |
 | Hydro station ID | - | Diagnostic |
 | Hydro distance | km | Diagnostic |
 
-Attributes: station name, station ID, river name, voivodeship, geographic coordinates, distance, measurement dates for individual parameters
+Water level sensor attributes: alarm level (`alarm_level`), warning level (`warning_level`).
+
+Extended data fetched from hydro-back API (`hydro-back.imgw.pl`): water state code, trend, alarm and warning thresholds.
 
 ### Meteorological (10 sensors)
 
@@ -184,6 +194,48 @@ The "Active warnings count" sensor contains a `warnings` attribute with the full
 Warnings can be filtered by:
 - Voivodeship (16 voivodeships)
 - County (search in area descriptions) - optional
+
+### Enhanced warnings — meteo.imgw.pl (6 sensors + 38 binary sensors)
+
+Optional detailed meteorological warnings from meteo.imgw.pl API. Independent from standard warnings from danepubliczne.imgw.pl.
+
+#### Sensors (`sensor` platform)
+
+| Sensor | Description | Type |
+|---|---|---|
+| Present warnings count | All warnings (including future) | Measurement |
+| Active warnings count | Currently active warnings | Measurement |
+| Present max level | Max level among present | - |
+| Active max level | Max level among active | - |
+| Present phenomena | List of phenomenon codes | - |
+| Active phenomena | List of active phenomenon codes | - |
+
+#### Binary sensors (`binary_sensor` platform)
+
+**Per level** (6 sensors): for each level (1, 2, 3) — separate binary sensor for "present" and "active" modes.
+
+**Per phenomenon** (32 sensors): for each of 16 meteorological phenomena — separate binary sensor for "present" and "active" modes:
+
+| Code | Phenomenon | Icon |
+|---|---|---|
+| BU | Thunderstorms | mdi:weather-lightning |
+| BG | Hailstorms | mdi:weather-hail |
+| IS | Heavy snow | mdi:weather-snowy-heavy |
+| ID | Heavy rain | mdi:weather-pouring |
+| MS | Freezing fog | mdi:weather-fog |
+| OB | Ice glaze | mdi:sun-snowflake-variant |
+| OM | Freezing precipitation | mdi:weather-snowy-rainy |
+| OS | Snowfall | mdi:weather-snowy |
+| PR | Ground frost | mdi:snowflake-thermometer |
+| RO | Thaw | mdi:snowflake-melt |
+| DB | Heavy rain with storms | mdi:weather-lightning-rainy |
+| MG | Dense fog | mdi:weather-hazy |
+| MR | Severe frost | mdi:snowflake-alert |
+| SW | Strong wind | mdi:weather-windy |
+| UP | Heat wave | mdi:weather-sunny-alert |
+| ZZ | Blizzards | mdi:weather-dust |
+
+Binary sensor attributes: warning level, probability, validity dates, SMS content.
 
 ### Weather forecast (weather entity)
 
@@ -266,7 +318,9 @@ After adding the integration you can change settings:
 2. Find **IMGW-PIB Monitor** entry
 3. Click **CONFIGURE**
 4. Set new update interval (5-120 minutes)
-5. Enable or disable weather forecast (weather entity)
+5. Enable or disable county-level warning filtering
+6. Enable or disable weather forecast (weather entity)
+7. Enable or disable enhanced warnings (meteo.imgw.pl)
 
 Default update interval: 30 minutes. The global coordinator syncs to the shortest interval across all instances.
 
@@ -497,6 +551,10 @@ Data comes from public IMGW-PIB API:
 - `https://danepubliczne.imgw.pl/api/data/meteo`
 - `https://danepubliczne.imgw.pl/api/data/warningsmeteo`
 - `https://danepubliczne.imgw.pl/api/data/warningshydro`
+
+Extended data:
+- `https://hydro-back.imgw.pl/station/hydro/status` (alarm levels, hydro trends)
+- `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` (enhanced warnings)
 
 Weather forecast:
 - `https://imgw-api-proxy.evtlab.pl/forecast`

@@ -17,6 +17,7 @@
           "add_hydro": "Dane hydrologiczne",
           "enable_warnings_meteo": "Włącz ostrzeżenia meteorologiczne",
           "enable_warnings_hydro": "Włącz ostrzeżenia hydrologiczne",
+          "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
           "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)"
         }
@@ -44,6 +45,7 @@
           "add_hydro": "Dane hydrologiczne",
           "enable_warnings_meteo": "Włącz ostrzeżenia meteorologiczne",
           "enable_warnings_hydro": "Włącz ostrzeżenia hydrologiczne",
+          "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
           "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)"
         }
@@ -87,7 +89,9 @@
         "title": "Ustawienia",
         "data": {
           "update_interval": "Interwał aktualizacji (minuty)",
-          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)"
+          "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
+          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)",
+          "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)"
         }
       }
     }
@@ -114,6 +118,38 @@
       "hydro_flow": { "name": "Przepływ{station_suffix}" },
       "hydro_water_temperature": { "name": "Temperatura wody{station_suffix}" },
       "hydro_ice_phenomenon": { "name": "Zjawisko lodowe{station_suffix}" },
+      "hydro_overgrowth": { "name": "Zjawisko zarastania{station_suffix}" },
+      "hydro_water_level_state": {
+        "name": "Stan wody{station_suffix}",
+        "state": {
+          "low": "Niski",
+          "medium": "Średni",
+          "high": "Wysoki",
+          "warning": "Ostrzegawczy",
+          "alarm": "Alarmowy"
+        }
+      },
+      "hydro_water_level_trend": {
+        "name": "Trend poziomu wody{station_suffix}",
+        "state": {
+          "strongly_falling": "Silnie malejący",
+          "falling": "Malejący",
+          "slightly_falling": "Lekko malejący",
+          "stable": "Stabilny",
+          "rising": "Wzrostowy",
+          "strongly_rising": "Silnie wzrostowy"
+        }
+      },
+      "hydro_warning_remaining": { "name": "Do stanu ostrzegawczego{station_suffix}" },
+      "hydro_alarm_remaining": { "name": "Do stanu alarmowego{station_suffix}" },
+      "hydro_water_level_alarm": {
+        "name": "Stan zagrożenia{station_suffix}",
+        "state": {
+          "none": "Brak",
+          "warning": "Ostrzegawczy",
+          "alarm": "Alarmowy"
+        }
+      },
       "hydro_station_id": { "name": "ID stacji hydro{station_suffix}" },
       "hydro_distance": { "name": "Odległość stacji hydro{station_suffix}" },
       "meteo_air_temperature": { "name": "Temperatura powietrza{station_suffix}" },
@@ -148,7 +184,53 @@
           "online": "Online",
           "offline": "Offline"
         }
-      }
+      },
+      "enh_warnings_present_count": { "name": "Rozszerzone ostrzeżenia (ogłoszone){station_suffix}" },
+      "enh_warnings_active_count": { "name": "Rozszerzone ostrzeżenia (aktywne){station_suffix}" },
+      "enh_warnings_present_max_level": { "name": "Najwyższy stopień rozszerzonego ostrzeżenia (ogłoszone){station_suffix}" },
+      "enh_warnings_active_max_level": { "name": "Najwyższy stopień rozszerzonego ostrzeżenia (aktywne){station_suffix}" },
+      "enh_warnings_present_phenomena": { "name": "Zjawiska rozszerzonych ostrzeżeń (ogłoszone){station_suffix}" },
+      "enh_warnings_active_phenomena": { "name": "Zjawiska rozszerzonych ostrzeżeń (aktywne){station_suffix}" }
+    },
+    "binary_sensor": {
+      "enh_warning_level_1_present": { "name": "Ostrzeżenie 1. stopnia (ogłoszone){station_suffix}" },
+      "enh_warning_level_1_active": { "name": "Ostrzeżenie 1. stopnia (aktywne){station_suffix}" },
+      "enh_warning_level_2_present": { "name": "Ostrzeżenie 2. stopnia (ogłoszone){station_suffix}" },
+      "enh_warning_level_2_active": { "name": "Ostrzeżenie 2. stopnia (aktywne){station_suffix}" },
+      "enh_warning_level_3_present": { "name": "Ostrzeżenie 3. stopnia (ogłoszone){station_suffix}" },
+      "enh_warning_level_3_active": { "name": "Ostrzeżenie 3. stopnia (aktywne){station_suffix}" },
+      "enh_warning_bu_present": { "name": "Burze (ogłoszone){station_suffix}" },
+      "enh_warning_bu_active": { "name": "Burze (aktywne){station_suffix}" },
+      "enh_warning_bg_present": { "name": "Burze z gradem (ogłoszone){station_suffix}" },
+      "enh_warning_bg_active": { "name": "Burze z gradem (aktywne){station_suffix}" },
+      "enh_warning_is_present": { "name": "Intensywne opady śniegu (ogłoszone){station_suffix}" },
+      "enh_warning_is_active": { "name": "Intensywne opady śniegu (aktywne){station_suffix}" },
+      "enh_warning_id_present": { "name": "Intensywne opady deszczu (ogłoszone){station_suffix}" },
+      "enh_warning_id_active": { "name": "Intensywne opady deszczu (aktywne){station_suffix}" },
+      "enh_warning_ms_present": { "name": "Mgła osadzająca szadź (ogłoszone){station_suffix}" },
+      "enh_warning_ms_active": { "name": "Mgła osadzająca szadź (aktywne){station_suffix}" },
+      "enh_warning_ob_present": { "name": "Oblodzenie (ogłoszone){station_suffix}" },
+      "enh_warning_ob_active": { "name": "Oblodzenie (aktywne){station_suffix}" },
+      "enh_warning_om_present": { "name": "Opady marznące (ogłoszone){station_suffix}" },
+      "enh_warning_om_active": { "name": "Opady marznące (aktywne){station_suffix}" },
+      "enh_warning_os_present": { "name": "Opady śniegu (ogłoszone){station_suffix}" },
+      "enh_warning_os_active": { "name": "Opady śniegu (aktywne){station_suffix}" },
+      "enh_warning_pr_present": { "name": "Przymrozki (ogłoszone){station_suffix}" },
+      "enh_warning_pr_active": { "name": "Przymrozki (aktywne){station_suffix}" },
+      "enh_warning_ro_present": { "name": "Roztopy (ogłoszone){station_suffix}" },
+      "enh_warning_ro_active": { "name": "Roztopy (aktywne){station_suffix}" },
+      "enh_warning_db_present": { "name": "Silny deszcz z burzami (ogłoszone){station_suffix}" },
+      "enh_warning_db_active": { "name": "Silny deszcz z burzami (aktywne){station_suffix}" },
+      "enh_warning_mg_present": { "name": "Gęsta mgła (ogłoszone){station_suffix}" },
+      "enh_warning_mg_active": { "name": "Gęsta mgła (aktywne){station_suffix}" },
+      "enh_warning_mr_present": { "name": "Silny mróz (ogłoszone){station_suffix}" },
+      "enh_warning_mr_active": { "name": "Silny mróz (aktywne){station_suffix}" },
+      "enh_warning_sw_present": { "name": "Silny wiatr (ogłoszone){station_suffix}" },
+      "enh_warning_sw_active": { "name": "Silny wiatr (aktywne){station_suffix}" },
+      "enh_warning_up_present": { "name": "Upał (ogłoszone){station_suffix}" },
+      "enh_warning_up_active": { "name": "Upał (aktywne){station_suffix}" },
+      "enh_warning_zz_present": { "name": "Zawieje zamiecie śnieżne (ogłoszone){station_suffix}" },
+      "enh_warning_zz_active": { "name": "Zawieje zamiecie śnieżne (aktywne){station_suffix}" }
     }
   }
 }

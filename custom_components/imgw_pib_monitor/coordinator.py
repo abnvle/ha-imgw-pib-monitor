@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import time
 from typing import Any
@@ -19,6 +19,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import ImgwApiClient, ImgwApiError
 from .const import (
     CONF_AUTO_DETECT,
+    CONF_ENABLE_ENHANCED_WARNINGS_METEO,
     CONF_ENABLE_WARNINGS_HYDRO,
     CONF_ENABLE_WARNINGS_METEO,
     CONF_POWIAT,
@@ -33,10 +34,12 @@ from .const import (
     DATA_TYPE_SYNOP,
     DATA_TYPE_WARNINGS_HYDRO,
     DATA_TYPE_WARNINGS_METEO,
+    DATA_TYPE_WARNINGS_METEO_ENHANCED,
     DEFAULT_MAX_DISTANCE,
     DOMAIN,
     FORECAST_API_URL,
     FORECAST_UPDATE_INTERVAL,
+    HYDRO_TREND_MAP,
     SYNOP_STATIONS,
     VOIVODESHIP_CAPITALS,
     VOIVODESHIPS,
@@ -66,7 +69,9 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Fetch all data from IMGW API without blocking the loop."""
         _LOGGER.debug("Fetching all IMGW-PIB data with rate limiting")
 
-        async def _fetch_with_limit(coro, endpoint_name: str):
+        async def _fetch_with_limit(coro, endpoint_name: str, default=None):
+            if default is None:
+                default = []
             async with self._semaphore:
                 try:
                     res = await coro
@@ -74,20 +79,36 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.debug(
                         "IMGW endpoint %s returned %d items",
                         endpoint_name,
-                        len(res) if isinstance(res, list) else 0,
+                        len(res) if isinstance(res, (list, dict)) else 0,
                     )
                     return res
                 except (ImgwApiError, asyncio.TimeoutError) as err:
                     _LOGGER.warning("Error fetching IMGW endpoint %s: %s", endpoint_name, err)
-                    return []
+                    return default
 
-        results = await asyncio.gather(
+        # Only fetch enhanced warnings if any entry has them enabled
+        fetch_enhanced = any(
+            e.data.get(CONF_ENABLE_ENHANCED_WARNINGS_METEO)
+            for e in self.hass.config_entries.async_entries(DOMAIN)
+        )
+
+        coros = [
             _fetch_with_limit(self.api.get_all_synop_data(), "synop"),
             _fetch_with_limit(self.api.get_all_hydro_data(), "hydro"),
             _fetch_with_limit(self.api.get_all_meteo_data(), "meteo"),
             _fetch_with_limit(self.api.get_warnings_meteo(), "warnings_meteo"),
             _fetch_with_limit(self.api.get_warnings_hydro(), "warnings_hydro"),
-        )
+        ]
+        if fetch_enhanced:
+            coros.append(
+                _fetch_with_limit(
+                    self.api.get_enhanced_warnings_meteo(),
+                    "enhanced_warnings_meteo",
+                    default={},
+                )
+            )
+
+        results = await asyncio.gather(*coros)
 
         data: dict[str, Any] = {
             DATA_TYPE_SYNOP: results[0],
@@ -95,6 +116,7 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             DATA_TYPE_METEO: results[2],
             DATA_TYPE_WARNINGS_METEO: results[3],
             DATA_TYPE_WARNINGS_HYDRO: results[4],
+            DATA_TYPE_WARNINGS_METEO_ENHANCED: results[5] if fetch_enhanced else {},
         }
 
         if all(not r for r in results):
@@ -175,6 +197,7 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             DATA_TYPE_METEO: {},
             DATA_TYPE_WARNINGS_METEO: {},
             DATA_TYPE_WARNINGS_HYDRO: {},
+            DATA_TYPE_WARNINGS_METEO_ENHANCED: {},
         }
 
         # 1. Synop
@@ -203,6 +226,34 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     result[DATA_TYPE_HYDRO][sid] = parsed
                     break
 
+        # 2b. Enrich hydro data with alarm levels and trend from hydro-back API
+        for sid, parsed in result[DATA_TYPE_HYDRO].items():
+            details = await self.global_coordinator.api.get_hydro_station_details(str(sid))
+            if details:
+                status = details.get("status") or {}
+                alarm_val = self._safe_int(status.get("alarmValue"))
+                warning_val = self._safe_int(status.get("warningValue"))
+                water_level = parsed.get("water_level")
+
+                parsed["alarm_level"] = alarm_val
+                parsed["warning_level"] = warning_val
+                parsed["water_level_state"] = details.get("stateCode")
+                trend_code = status.get("trend")
+                parsed["water_level_trend"] = HYDRO_TREND_MAP.get(trend_code) if trend_code is not None else None
+
+                # Calculate remaining cm to thresholds
+                if water_level is not None and alarm_val is not None:
+                    parsed["alarm_remaining"] = alarm_val - water_level
+                if water_level is not None and warning_val is not None:
+                    parsed["warning_remaining"] = warning_val - water_level
+
+                _LOGGER.debug(
+                    "Hydro-back: station %s — state=%s, trend=%s, alarm_remaining=%s, warning_remaining=%s",
+                    sid, parsed.get("water_level_state"), parsed.get("water_level_trend"),
+                    parsed.get("alarm_remaining"), parsed.get("warning_remaining"),
+                )
+            await asyncio.sleep(0.1)
+
         # 3. Meteo
         for sid in self.config_data.get(CONF_SELECTED_METEO, []):
             for item in global_data.get(DATA_TYPE_METEO, []):
@@ -217,10 +268,11 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.config_data.get(CONF_ENABLE_WARNINGS_METEO):
             voivodeship = self.config_data.get(CONF_VOIVODESHIP)
             powiat = self.config_data.get(CONF_POWIAT)
-            teryt_filter = powiat if (powiat and powiat != "all") else voivodeship
+            use_powiat = self.config_data.get(CONF_USE_POWIAT_FOR_WARNINGS, False)
+            teryt_filter = powiat if (use_powiat and powiat and powiat != "all") else voivodeship
             warnings = global_data.get(DATA_TYPE_WARNINGS_METEO, [])
             filtered = [
-                w for w in warnings 
+                w for w in warnings
                 if any(t.startswith(teryt_filter) for t in w.get("teryt", []))
             ] if teryt_filter else warnings
             result[DATA_TYPE_WARNINGS_METEO] = self._parse_warnings_meteo(filtered)
@@ -255,6 +307,18 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ] if voiv_name else warnings
 
             result[DATA_TYPE_WARNINGS_HYDRO] = self._parse_warnings_hydro(filtered)
+
+        # 6. Enhanced Warnings Meteo (meteo.imgw.pl)
+        if self.config_data.get(CONF_ENABLE_ENHANCED_WARNINGS_METEO):
+            voivodeship = self.config_data.get(CONF_VOIVODESHIP)
+            powiat = self.config_data.get(CONF_POWIAT)
+            use_powiat = self.config_data.get(CONF_USE_POWIAT_FOR_WARNINGS, False)
+            teryt_filter = powiat if (use_powiat and powiat and powiat != "all") else voivodeship
+
+            enhanced_raw = global_data.get(DATA_TYPE_WARNINGS_METEO_ENHANCED, {})
+            result[DATA_TYPE_WARNINGS_METEO_ENHANCED] = self._parse_enhanced_warnings_meteo(
+                enhanced_raw, teryt_filter
+            )
 
         return result
 
@@ -363,6 +427,8 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "flow_date": data.get("przeplyw_data"),
             "ice_phenomenon": self._safe_int(data.get("zjawisko_lodowe")),
             "ice_phenomenon_date": data.get("zjawisko_lodowe_data_pomiaru"),
+            "overgrowth": self._safe_int(data.get("zjawisko_zarastania")),
+            "overgrowth_date": data.get("zjawisko_zarastania_data_pomiaru"),
         }
 
     def _parse_meteo(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -389,12 +455,19 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         w_list = []
         max_lvl = 0
         for w in data:
-            lvl = int(w.get("stopien", 0))
+            try:
+                lvl = int(w.get("stopien", 0))
+            except (ValueError, TypeError):
+                lvl = 0
             max_lvl = max(max_lvl, lvl)
+            try:
+                prob = int(w.get("prawdopodobienstwo", 0))
+            except (ValueError, TypeError):
+                prob = 0
             w_list.append({
                 "event": w.get("nazwa_zdarzenia"),
                 "level": lvl,
-                "probability": int(w.get("prawdopodobienstwo", 0)),
+                "probability": prob,
                 "valid_from": w.get("obowiazuje_od"),
                 "valid_to": w.get("obowiazuje_do"),
                 "content": w.get("tresc"),
@@ -446,6 +519,117 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "warnings": w_list,
             "latest_warning": latest,
         }
+
+    def _parse_enhanced_warnings_meteo(
+        self, raw_data: dict[str, Any], teryt_filter: str | None
+    ) -> dict[str, Any]:
+        """Parse enhanced meteorological warnings from meteo.imgw.pl."""
+        if not raw_data:
+            return self._empty_enhanced_warnings()
+
+        teryt_map = raw_data.get("teryt", {})
+        all_warnings = raw_data.get("warnings", {})
+
+        # Collect unique warning IDs for the region
+        warning_ids: set[str] = set()
+        if teryt_filter:
+            for teryt_code, ids in teryt_map.items():
+                if teryt_code.startswith(teryt_filter):
+                    warning_ids.update(ids if isinstance(ids, list) else [])
+        else:
+            for ids in teryt_map.values():
+                warning_ids.update(ids if isinstance(ids, list) else [])
+
+        # Parse warnings
+        now = datetime.now(timezone.utc)
+        warnings: list[dict[str, Any]] = []
+        for wid in warning_ids:
+            w = all_warnings.get(wid)
+            if not w:
+                continue
+
+            start_at = self._parse_iso_datetime(w.get("LxValidFrom"))
+            end_at = self._parse_iso_datetime(w.get("LxValidTo"))
+            is_active = bool(start_at and end_at and start_at <= now <= end_at)
+
+            try:
+                level = int(w.get("Level", 0))
+            except (ValueError, TypeError):
+                level = 0
+
+            try:
+                probability = int(w.get("Probability", 0))
+            except (ValueError, TypeError):
+                probability = 0
+
+            warnings.append({
+                "id": wid,
+                "phenomenon_code": w.get("PhenomenonCode", ""),
+                "phenomenon_name": w.get("PhenomenonName", ""),
+                "phenomenon_name_en": w.get("EnPhenomenonName", ""),
+                "level": level,
+                "probability": probability,
+                "valid_from": w.get("LxValidFrom"),
+                "valid_to": w.get("LxValidTo"),
+                "released_at": w.get("LxReleaseDateTime"),
+                "content": w.get("Content", ""),
+                "content_en": w.get("EnContent", ""),
+                "sms": w.get("SMS", ""),
+                "comments": w.get("Comments", ""),
+                "is_active": is_active,
+            })
+
+        warnings.sort(key=lambda x: (-x["level"], x.get("valid_from", "")))
+
+        # Compute aggregates
+        present = warnings
+        active = [w for w in warnings if w["is_active"]]
+
+        by_phenomenon_present: dict[str, list[dict[str, Any]]] = {}
+        by_phenomenon_active: dict[str, list[dict[str, Any]]] = {}
+        for w in present:
+            code = w["phenomenon_code"]
+            by_phenomenon_present.setdefault(code, []).append(w)
+        for w in active:
+            code = w["phenomenon_code"]
+            by_phenomenon_active.setdefault(code, []).append(w)
+
+        return {
+            "present_count": len(present),
+            "active_count": len(active),
+            "present_max_level": max((w["level"] for w in present), default=0),
+            "active_max_level": max((w["level"] for w in active), default=0),
+            "present_phenomena": list(by_phenomenon_present.keys()),
+            "active_phenomena": list(by_phenomenon_active.keys()),
+            "warnings": warnings,
+            "by_phenomenon_present": by_phenomenon_present,
+            "by_phenomenon_active": by_phenomenon_active,
+        }
+
+    @staticmethod
+    def _empty_enhanced_warnings() -> dict[str, Any]:
+        """Return empty enhanced warnings structure."""
+        return {
+            "present_count": 0,
+            "active_count": 0,
+            "present_max_level": 0,
+            "active_max_level": 0,
+            "present_phenomena": [],
+            "active_phenomena": [],
+            "warnings": [],
+            "by_phenomenon_present": {},
+            "by_phenomenon_active": {},
+        }
+
+    @staticmethod
+    def _parse_iso_datetime(dt_str: str | None) -> datetime | None:
+        """Parse ISO 8601 datetime string."""
+        if not dt_str:
+            return None
+        try:
+            return datetime.fromisoformat(dt_str)
+        except (ValueError, TypeError):
+            return None
 
     @staticmethod
     def _safe_float(v: Any) -> float | None:

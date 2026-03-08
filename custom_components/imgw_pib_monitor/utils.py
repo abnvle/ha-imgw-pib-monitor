@@ -26,7 +26,7 @@ async def nominatim_reverse_geocode(
         "accept-language": "pl",
         "zoom": "10",
     }
-    headers = {"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.0.0"}
+    headers = {"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.1.0"}
 
     try:
         async with session.get(
@@ -79,7 +79,7 @@ async def reverse_geocode(
         return None
 
     url = "https://imgw-api-proxy.evtlab.pl/search"
-    headers = {"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/1.1.0"}
+    headers = {"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.1.0"}
 
     best_location = None
     best_distance = float("inf")

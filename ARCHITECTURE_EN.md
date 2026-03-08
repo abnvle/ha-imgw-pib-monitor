@@ -4,7 +4,7 @@
 
 ## Overview
 
-Home Assistant integration for the IMGW-PIB public API (Institute of Meteorology and Water Management - National Research Institute). Uses multi-tier coordinator architecture for efficient data fetching from 5 API endpoints, supports up to 40 sensors and an optional weather entity with daily and hourly forecasts. Offers two configuration modes with advanced geocoding and county-level warning filtering.
+Home Assistant integration for the IMGW-PIB public API (Institute of Meteorology and Water Management - National Research Institute). Uses multi-tier coordinator architecture for efficient data fetching from 7 API endpoints, supports up to ~90 entities (sensors, binary sensors, weather entity) and an optional weather entity with daily and hourly forecasts. Offers two configuration modes with advanced geocoding and county-level warning filtering.
 
 ## Architecture
 
@@ -38,8 +38,11 @@ Home Assistant integration for the IMGW-PIB public API (Institute of Meteorology
 └───────┬────────┘          └─────────┬────────┘
         │                              │
 ┌───────▼────────┐          ┌─────────▼────────┐
-│   Sensors 1    │          │   Sensors N      │
-│   (8-40)       │          │   (8-40)         │
+│  Sensors 1     │          │  Sensors N       │
+│  (8-40)        │          │  (8-40)          │
+├────────────────┤          ├──────────────────┤
+│ Binary Sensors │          │ Binary Sensors   │
+│  (0-38)        │          │  (0-38)          │
 └────────────────┘          └──────────────────┘
 
         ┌──────────────────────────────┐
@@ -63,10 +66,11 @@ custom_components/imgw_pib_monitor/
 ├── __init__.py              # Entry point, setup/unload, version migration
 ├── manifest.json            # Integration metadata
 ├── const.py                 # Constants, endpoints, voivodeship codes, SYNOP coords, icon mapping
-├── api.py                   # HTTP client for IMGW-PIB API
+├── api.py                   # HTTP client for IMGW-PIB API (+ hydro-back session)
 ├── coordinator.py           # Global + Instance + Forecast coordinators
 ├── config_flow.py           # Config Flow (auto/manual) + Options Flow
-├── sensor.py                # 40 sensor definitions
+├── sensor.py                # ~50 sensor definitions
+├── binary_sensor.py         # 38 binary sensors (enhanced warnings)
 ├── weather.py               # Weather entity with daily and hourly forecasts
 ├── utils.py                 # Geocoding, Haversine
 ├── strings.json             # Base strings (required by HA)
@@ -114,6 +118,7 @@ Handles two configuration modes:
 │ 6. User selects data types                  │
 │    ☐ Synop  ☐ Meteo  ☐ Hydro               │
 │    ☐ Meteo warnings ☐ Hydro warnings       │
+│    ☐ Enhanced warnings (meteo.imgw)        │
 │    ☐ Filter by county (optional)           │
 └─────────────────────────────────────────────┘
 ```
@@ -154,7 +159,7 @@ Handles two configuration modes:
 - **Purpose**: Centralized data fetching for all instances
 - **Interval**: Synced to the shortest interval across all instances (default 30 minutes)
 - **Rate limiting**: Semaphore with limit of 2 concurrent requests + 200ms delay
-- **Endpoints**: Fetches all 5 endpoints in parallel via `asyncio.gather`
+- **Endpoints**: Fetches 5-7 endpoints in parallel via `asyncio.gather` (enhanced warnings conditionally)
 - **Cache**: Stores data in `self.data`, accessible to all instance coordinators
 - **Singleton**: Created once in `hass.data[DOMAIN]["global_coordinator"]`
 
@@ -186,17 +191,30 @@ class ImgwApiClient:
 
     def __init__(self, session: aiohttp.ClientSession)
         # Uses HTTP session from Home Assistant
+        # Manages additional session for hydro-back API
 
     async def _fetch(self, url: str) -> list | dict
         # Timeout: 30 seconds
         # Error handling: ImgwApiError, ImgwApiConnectionError
 
-    # Public methods:
+    # Public methods (danepubliczne.imgw.pl):
     async def get_all_synop_data() -> list[dict]
     async def get_all_hydro_data() -> list[dict]
     async def get_all_meteo_data() -> list[dict]
     async def get_warnings_meteo() -> list[dict]
     async def get_warnings_hydro() -> list[dict]
+
+    # Enhanced warnings (meteo.imgw.pl):
+    async def get_enhanced_warnings_meteo() -> dict  # TERYT → warnings
+
+    # Enriched hydro data (hydro-back.imgw.pl):
+    async def get_hydro_station_details(station_id) -> dict
+        # Dedicated session with User-Agent (hydro-back requires it)
+        # Alarm levels, warning levels, trend
+
+    # Session management:
+    def _get_hydro_session() -> aiohttp.ClientSession  # reusable session
+    async def close()  # closes internal sessions
 
     # Helper methods:
     async def get_synop_stations() -> dict[str, str]  # id: name
@@ -232,7 +250,21 @@ SensorEntity (Home Assistant)
 
 **Informational** (15 sensors):
 - Warnings: max_level, latest_event, latest_level, latest_probability, latest_valid_from, latest_valid_to, latest_content/description
-- Hydro: ice_phenomenon
+- Hydro: ice_phenomenon, overgrowth
+
+**Enriched hydro** (6 sensors, from hydro-back API):
+- Water level status (enum: low/medium/high/warning/alarm)
+- Water level trend (enum: strongly_falling → strongly_rising)
+- Distance to warning level (cm)
+- Distance to alarm level (cm)
+- Water alarm status (enum: none/warning/alarm)
+- Overgrowth phenomenon (boolean)
+- Attributes: alarm and warning levels
+
+**Enhanced warnings** (6 sensors):
+- Warning count (current/active)
+- Highest warning level
+- Phenomenon code list (current/active)
 
 #### Device grouping
 
@@ -255,7 +287,7 @@ WeatherEntity (Home Assistant)
                 - native_temperature, humidity, pressure, wind
                 - async_forecast_daily (day/night merging)
                 - async_forecast_hourly
-                - extra_state_attributes (precip, sunrise/sunset)
+                - extra_state_attributes (precip, sunrise/sunset, hourly_count, daily_count)
 ```
 
 #### Current data
@@ -273,6 +305,34 @@ WeatherEntity (Home Assistant)
 #### Hourly forecast
 - Full weather data for each hour
 - Temperature, feels-like, humidity, pressure, wind, cloud coverage, precipitation
+
+### 4b. Binary Sensors (`binary_sensor.py`)
+
+`binary_sensor` platform for enhanced warnings from meteo.imgw.pl:
+
+#### Class hierarchy
+```
+BinarySensorEntity (Home Assistant)
+    └── CoordinatorEntity[ImgwDataUpdateCoordinator]
+        └── ImgwEnhancedBinarySensor
+            ├── uses: ImgwEnhancedBinarySensorDescription
+            └── implements:
+                - is_on (from value_fn)
+                - extra_state_attributes (level, probability, SMS, dates)
+                - device_info (enhanced warnings device)
+```
+
+#### Binary sensor structure (38 entities)
+- **Per level × status** (6): level 1/2/3 × current/active
+- **Per phenomenon × status** (32): 16 phenomenon codes × current/active
+
+#### 16 meteorological phenomenon codes
+`W`, `Z`, `R`, `S`, `M`, `O`, `MR`, `PR`, `RT`, `SW`, `GR`, `IO`, `SO`, `NU`, `UP`, `IN`
+(thunderstorms, blizzards, rain, snow, fog, icing, freezing rain, ground frost, thaw, strong wind, hail, intense rainfall, heavy snowfall, dangerous phenomena, heat wave, other)
+
+#### Entity creation
+- Entities always created, even when API is temporarily unavailable
+- State `off` when no data (not `unavailable`)
 
 ### 5. Location Search (`utils.py` and `config_flow.py`)
 
@@ -398,8 +458,9 @@ def haversine(lat1, lon1, lat2, lon2) -> float:
    IF NOT:
    └─ cleanup any leftover forecast entity/device from registry
 
-5. Forward setup to platforms (sensor + optionally weather)
+5. Forward setup to platforms (sensor, binary_sensor, optionally weather)
    ├─ sensor.async_setup_entry() creates sensors
+   ├─ binary_sensor.async_setup_entry() creates binary sensors
    └─ weather.async_setup_entry() creates weather entity
 
 6. Register update listener for Options Flow
@@ -419,7 +480,9 @@ def haversine(lat1, lon1, lat2, lon2) -> float:
 │    ├─ await asyncio.sleep(0.2)             │
 │    ├─ fetch hydro                           │
 │    ├─ await asyncio.sleep(0.2)             │
-│    └─ ... (5 endpoints)                     │
+│    ├─ ... (5 base endpoints)               │
+│    ├─ if enhanced: fetch meteo.imgw.pl     │
+│    └─ (5-7 endpoints, conditionally)       │
 │                                             │
 │ 2. Save in self.data                        │
 └─────────────────┬───────────────────────────┘
@@ -438,8 +501,10 @@ def haversine(lat1, lon1, lat2, lon2) -> float:
 │ 2. If auto -> check location        │
 │ 3. Filter for own stations         │
 │ 4. Parse and validate               │
-│ 5. Calculate distances              │
-│ 6. Return prepared data             │
+│ 5. Enrich hydro (hydro-back API)   │
+│ 6. Parse enhanced warnings          │
+│ 7. Calculate distances              │
+│ 8. Return prepared data             │
 └─────────────────┬───────────────────┘
                   │
         ┌─────────┴─────────┐
@@ -526,8 +591,8 @@ class ImgwGlobalDataCoordinator:
 ```
 
 ### Data Sharing
-- **Before**: N instances x 5 endpoints = 5N requests
-- **After**: 1 global x 5 endpoints = 5 requests
+- **Before**: N instances x 5-7 endpoints = 5-7N requests
+- **After**: 1 global x 5-7 endpoints = 5-7 requests (enhanced conditionally)
 - **Savings**: N instances use the same data
 
 ### Lazy Loading
@@ -554,6 +619,8 @@ for k, v in raw_attrs.items():
 | Meteo | `https://danepubliczne.imgw.pl/api/data/meteo` | JSON | List of meteorological stations |
 | Warnings Meteo | `https://danepubliczne.imgw.pl/api/data/warningsmeteo` | JSON | Warnings with TERYT codes |
 | Warnings Hydro | `https://danepubliczne.imgw.pl/api/data/warningshydro` | JSON | Warnings with area list |
+| Enhanced Warnings | `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` | JSON | Enhanced warnings (16 phenomena, 3 levels) |
+| Hydro-back | `https://hydro-back.imgw.pl/station/hydro/status?id=...` | JSON | Alarm levels, warning levels, trend |
 | Forecast | `https://imgw-api-proxy.evtlab.pl/forecast` | JSON | Weather forecast (current, daily, hourly) |
 
 ## Technical Requirements
@@ -562,10 +629,12 @@ for k, v in raw_attrs.items():
 - **Python**: 3.12+
 - **Dependencies**: aiohttp (built into HA), voluptuous (built into HA)
 - **API**: No authentication required
-- **Platforms**: `sensor`, `weather` (optional)
-- **Config version**: 8 (with automatic migration from older versions)
+- **Platforms**: `sensor`, `binary_sensor`, `weather` (optional)
+- **Config version**: 10 (with automatic migration from older versions 1-9)
 - **Network**: Access to:
   - `danepubliczne.imgw.pl` (measurement data and warnings)
+  - `meteo.imgw.pl` (enhanced warnings — conditionally)
+  - `hydro-back.imgw.pl` (enriched hydro data — alarm levels, trend)
   - `imgw-api-proxy.evtlab.pl` (location search, TERYT codes, weather forecast)
   - `nominatim.openstreetmap.org` (reverse geocoding in auto-discovery mode)
 
@@ -574,7 +643,8 @@ for k, v in raw_attrs.items():
 ### IMGW-PIB API Limits
 - No official limits
 - Integration uses rate limiting (2 req + 200ms) as best practice
-- Global coordinator: 5 requests per update cycle
+- Global coordinator: 5-7 requests per update cycle (enhanced warnings conditionally)
+- Instance coordinator: 1 request to hydro-back per hydro station per cycle
 
 ### IMGW API Proxy Limits
 - No official limits for location search

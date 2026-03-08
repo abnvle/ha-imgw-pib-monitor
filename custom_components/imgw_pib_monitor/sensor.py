@@ -29,6 +29,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     ATTRIBUTION,
     CONF_AUTO_DETECT,
+    CONF_ENABLE_ENHANCED_WARNINGS_METEO,
     CONF_ENABLE_WARNINGS_HYDRO,
     CONF_ENABLE_WARNINGS_METEO,
     CONF_POWIAT,
@@ -43,6 +44,7 @@ from .const import (
     DATA_TYPE_SYNOP,
     DATA_TYPE_WARNINGS_HYDRO,
     DATA_TYPE_WARNINGS_METEO,
+    DATA_TYPE_WARNINGS_METEO_ENHANCED,
     DOMAIN,
     MANUFACTURER,
     VOIVODESHIPS,
@@ -56,6 +58,7 @@ class ImgwSensorEntityDescription(SensorEntityDescription):
 
     value_fn: Callable[[dict[str, Any]], Any]
     extra_attrs_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    always_create: bool = False
 
 
 # ── Weather sensors ────────────────────────────────────────────
@@ -136,6 +139,21 @@ SYNOP_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
 
 # ── River Level sensors ───────────────────────────────────────
 
+
+def _water_level_alarm_state(data: dict[str, Any]) -> str | None:
+    """Determine water level alarm state from thresholds."""
+    water_level = data.get("water_level")
+    if water_level is None:
+        return None
+    alarm = data.get("alarm_level")
+    if alarm is not None and water_level >= alarm:
+        return "alarm"
+    warning = data.get("warning_level")
+    if warning is not None and water_level >= warning:
+        return "warning"
+    return "none"
+
+
 HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
     ImgwSensorEntityDescription(
         key="water_level",
@@ -145,6 +163,12 @@ HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda data: data.get("water_level"),
+        extra_attrs_fn=lambda data: {
+            k: v for k, v in {
+                "alarm_level": data.get("alarm_level"),
+                "warning_level": data.get("warning_level"),
+            }.items() if v is not None
+        },
     ),
     ImgwSensorEntityDescription(
         key="flow",
@@ -169,6 +193,57 @@ HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         translation_key="hydro_ice_phenomenon",
         icon="mdi:snowflake",
         value_fn=lambda data: data.get("ice_phenomenon"),
+        always_create=True,
+    ),
+    ImgwSensorEntityDescription(
+        key="overgrowth",
+        translation_key="hydro_overgrowth",
+        icon="mdi:grass",
+        value_fn=lambda data: data.get("overgrowth"),
+        always_create=True,
+    ),
+    ImgwSensorEntityDescription(
+        key="water_level_state",
+        translation_key="hydro_water_level_state",
+        device_class=SensorDeviceClass.ENUM,
+        options=["low", "medium", "high", "warning", "alarm"],
+        icon="mdi:waves-arrow-up",
+        value_fn=lambda data: data.get("water_level_state"),
+    ),
+    ImgwSensorEntityDescription(
+        key="water_level_trend",
+        translation_key="hydro_water_level_trend",
+        device_class=SensorDeviceClass.ENUM,
+        options=["strongly_falling", "falling", "slightly_falling", "stable", "rising", "strongly_rising"],
+        icon="mdi:trending-up",
+        value_fn=lambda data: data.get("water_level_trend"),
+    ),
+    ImgwSensorEntityDescription(
+        key="warning_remaining",
+        translation_key="hydro_warning_remaining",
+        native_unit_of_measurement="cm",
+        icon="mdi:water-check",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda data: data.get("warning_remaining"),
+    ),
+    ImgwSensorEntityDescription(
+        key="alarm_remaining",
+        translation_key="hydro_alarm_remaining",
+        native_unit_of_measurement="cm",
+        icon="mdi:water-alert",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda data: data.get("alarm_remaining"),
+    ),
+    ImgwSensorEntityDescription(
+        key="water_level_alarm",
+        translation_key="hydro_water_level_alarm",
+        device_class=SensorDeviceClass.ENUM,
+        options=["none", "warning", "alarm"],
+        icon="mdi:water-alert",
+        value_fn=_water_level_alarm_state,
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="station_id",
@@ -294,12 +369,14 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("active_warnings_count", 0),
         extra_attrs_fn=lambda data: {"warnings": data.get("warnings", [])},
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_meteo_max_level",
         translation_key="warnings_meteo_max_level",
         icon="mdi:alert",
         value_fn=lambda data: data.get("max_level", 0),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_meteo_latest_event",
@@ -312,6 +389,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
                 if w.get("event")
             )[:255] or None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_meteo_latest_level",
@@ -322,6 +400,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
             if data.get("latest_warning")
             else None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_meteo_latest_probability",
@@ -333,6 +412,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
             if data.get("latest_warning")
             else None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_meteo_latest_valid_from",
@@ -343,6 +423,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
             if data.get("latest_warning")
             else None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_meteo_latest_valid_to",
@@ -353,6 +434,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
             if data.get("latest_warning")
             else None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_meteo_latest_content",
@@ -365,6 +447,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
                 if w.get("content")
             )[:255] or None
         ),
+        always_create=True,
     ),
 )
 
@@ -376,12 +459,14 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("active_warnings_count", 0),
         extra_attrs_fn=lambda data: {"warnings": data.get("warnings", [])},
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_hydro_max_level",
         translation_key="warnings_hydro_max_level",
         icon="mdi:alert",
         value_fn=lambda data: data.get("max_level", 0),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_hydro_latest_event",
@@ -394,6 +479,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
                 if w.get("event") or w.get("description")
             )[:255] or None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_hydro_latest_level",
@@ -404,6 +490,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
             if data.get("latest_warning")
             else None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_hydro_latest_probability",
@@ -415,6 +502,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
             if data.get("latest_warning")
             else None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_hydro_latest_valid_from",
@@ -425,6 +513,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
             if data.get("latest_warning")
             else None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_hydro_latest_valid_to",
@@ -435,6 +524,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
             if data.get("latest_warning")
             else None
         ),
+        always_create=True,
     ),
     ImgwSensorEntityDescription(
         key="warnings_hydro_latest_description",
@@ -447,6 +537,64 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
                 if w.get("description")
             )[:255] or None
         ),
+        always_create=True,
+    ),
+)
+
+# ── Enhanced Warning sensors (meteo.imgw.pl) ─────────────────
+
+WARNINGS_METEO_ENHANCED_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
+    ImgwSensorEntityDescription(
+        key="enh_warnings_present_count",
+        translation_key="enh_warnings_present_count",
+        icon="mdi:alert-circle-outline",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("present_count", 0),
+        extra_attrs_fn=lambda data: {"warnings": data.get("warnings", [])},
+        always_create=True,
+    ),
+    ImgwSensorEntityDescription(
+        key="enh_warnings_active_count",
+        translation_key="enh_warnings_active_count",
+        icon="mdi:alert-circle",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("active_count", 0),
+        extra_attrs_fn=lambda data: {
+            "warnings": [w for w in data.get("warnings", []) if w.get("is_active")]
+        },
+        always_create=True,
+    ),
+    ImgwSensorEntityDescription(
+        key="enh_warnings_present_max_level",
+        translation_key="enh_warnings_present_max_level",
+        icon="mdi:alert",
+        value_fn=lambda data: data.get("present_max_level", 0),
+        always_create=True,
+    ),
+    ImgwSensorEntityDescription(
+        key="enh_warnings_active_max_level",
+        translation_key="enh_warnings_active_max_level",
+        icon="mdi:alert",
+        value_fn=lambda data: data.get("active_max_level", 0),
+        always_create=True,
+    ),
+    ImgwSensorEntityDescription(
+        key="enh_warnings_present_phenomena",
+        translation_key="enh_warnings_present_phenomena",
+        icon="mdi:weather-lightning",
+        value_fn=lambda data: (
+            ", ".join(data.get("present_phenomena", []))[:255] or None
+        ),
+        always_create=True,
+    ),
+    ImgwSensorEntityDescription(
+        key="enh_warnings_active_phenomena",
+        translation_key="enh_warnings_active_phenomena",
+        icon="mdi:weather-lightning",
+        value_fn=lambda data: (
+            ", ".join(data.get("active_phenomena", []))[:255] or None
+        ),
+        always_create=True,
     ),
 )
 
@@ -465,10 +613,12 @@ async def async_setup_entry(
         s_data = coordinator.data.get(data_type, {}).get(station_id) if station_id else coordinator.data.get(data_type)
 
         if not s_data:
-            return
+            if station_id:
+                return  # No station data — don't create station sensors
+            s_data = {}  # For warnings — always create always_create sensors
 
         for desc in sensor_descs:
-            if desc.value_fn(s_data) is not None:
+            if desc.always_create or desc.value_fn(s_data) is not None:
                 entities.append(ImgwSensorEntity(coordinator, desc, data_type, station_id))
 
     # 1. Weather (SYNOP)
@@ -490,6 +640,10 @@ async def async_setup_entry(
     # 5. Warnings Hydro
     if entry.data.get(CONF_ENABLE_WARNINGS_HYDRO):
         add_sensors(DATA_TYPE_WARNINGS_HYDRO, None, WARNINGS_HYDRO_SENSORS)
+
+    # 6. Enhanced Warnings Meteo (meteo.imgw.pl)
+    if entry.data.get(CONF_ENABLE_ENHANCED_WARNINGS_METEO):
+        add_sensors(DATA_TYPE_WARNINGS_METEO_ENHANCED, None, WARNINGS_METEO_ENHANCED_SENSORS)
 
     async_add_entities(entities)
 
@@ -519,14 +673,8 @@ class ImgwSensorEntity(CoordinatorEntity[ImgwDataUpdateCoordinator], SensorEntit
         if station_id:
             uid = f"{eid}_{sid_to_uid(station_id)}_{description.key}"
         else:
-            # For warnings - include powiat in unique ID if configured
-            powiat = coordinator.config_data.get(CONF_POWIAT)
-            use_powiat = coordinator.config_data.get(CONF_USE_POWIAT_FOR_WARNINGS, False)
-            if use_powiat and powiat and powiat != "all":
-                uid = f"{eid}_{powiat}_{description.key}"
-            else:
-                voiv = coordinator.config_data.get(CONF_VOIVODESHIP, "global")
-                uid = f"{eid}_{voiv}_{description.key}"
+            # For warnings - stable ID regardless of filtering level
+            uid = f"{eid}_{description.key}"
         self._attr_unique_id = uid
 
     @property
@@ -586,17 +734,20 @@ class ImgwSensorEntity(CoordinatorEntity[ImgwDataUpdateCoordinator], SensorEntit
                 warning_type_label = "meteo"
             elif self._data_type == DATA_TYPE_WARNINGS_HYDRO:
                 warning_type_label = "hydro"
+            elif self._data_type == DATA_TYPE_WARNINGS_METEO_ENHANCED:
+                warning_type_label = "meteo (rozszerzone)"
             else:
                 warning_type_label = self._data_type
+
+            # Stable identifier regardless of filtering level
+            identifier = f"{self._data_type}_{eid}"
 
             if use_powiat and powiat_code and powiat_code != "all":
                 powiat_name = self.coordinator.config_data.get(CONF_POWIAT_NAME, powiat_code)
                 name = f"Ostrzeżenia {warning_type_label} — {powiat_name}"
-                identifier = f"{self._data_type}_{powiat_code}_{eid}"
             else:
                 voiv_name = VOIVODESHIPS.get(voiv_code, voiv_code)
                 name = f"Ostrzeżenia {warning_type_label} — {voiv_name}"
-                identifier = f"{self._data_type}_{voiv_code}_{eid}"
 
             model = f"Ostrzeżenia - tryb: {mode_label} | Dane z API IMGW-PIB"
 
@@ -606,7 +757,7 @@ class ImgwSensorEntity(CoordinatorEntity[ImgwDataUpdateCoordinator], SensorEntit
             "manufacturer": MANUFACTURER,
             "model": model,
             "entry_type": "service",
-            "configuration_url": "https://evt.pl",
+            "configuration_url": "https://github.com/abnvle/ha-imgw-pib-monitor",
         }
 
     @property

@@ -29,6 +29,7 @@ from homeassistant.helpers.selector import (
 from .api import ImgwApiClient, ImgwApiError
 from .const import (
     CONF_AUTO_DETECT,
+    CONF_ENABLE_ENHANCED_WARNINGS_METEO,
     CONF_ENABLE_WARNINGS_HYDRO,
     CONF_ENABLE_WARNINGS_METEO,
     CONF_ENABLE_WEATHER_FORECAST,
@@ -105,7 +106,7 @@ def _find_nearest_station(
 class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a minimalist and smart config flow for IMGW-PIB Monitor."""
 
-    VERSION = 8
+    VERSION = 10
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -171,8 +172,20 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 api.get_all_synop_data(),
                 api.get_all_hydro_data(),
                 api.get_all_meteo_data(),
+                return_exceptions=True,
             )
-            synop_data, hydro_data, meteo_data = results
+            synop_data = results[0] if not isinstance(results[0], BaseException) else []
+            hydro_data = results[1] if not isinstance(results[1], BaseException) else []
+            meteo_data = results[2] if not isinstance(results[2], BaseException) else []
+
+            if not synop_data and not hydro_data and not meteo_data:
+                _LOGGER.warning(
+                    "All IMGW API endpoints unavailable: synop=%s, hydro=%s, meteo=%s",
+                    results[0] if isinstance(results[0], BaseException) else "ok",
+                    results[1] if isinstance(results[1], BaseException) else "ok",
+                    results[2] if isinstance(results[2], BaseException) else "ok",
+                )
+                return self.async_abort(reason="cannot_connect")
 
             # Find nearest for each type independently
             self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
@@ -264,16 +277,25 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 voivodeship = self._infer_voivodeship()
                 final_config[CONF_VOIVODESHIP] = voivodeship
 
-                # Check if user wants powiat-level filtering
-                if user_input.get(CONF_USE_POWIAT_FOR_WARNINGS) and self._detected_powiat_code:
-                    final_config[CONF_POWIAT] = self._detected_powiat_code
-                    final_config[CONF_POWIAT_NAME] = self._detected_powiat_name
-                    final_config[CONF_USE_POWIAT_FOR_WARNINGS] = True
+            # Always store detected powiat data (toggle only controls filtering)
+            if self._detected_powiat_code:
+                final_config[CONF_POWIAT] = self._detected_powiat_code
+                final_config[CONF_POWIAT_NAME] = self._detected_powiat_name
+            final_config[CONF_USE_POWIAT_FOR_WARNINGS] = bool(
+                user_input.get(CONF_USE_POWIAT_FOR_WARNINGS)
+            )
 
             if user_input.get("enable_warnings_meteo"):
                 final_config[CONF_ENABLE_WARNINGS_METEO] = True
             if user_input.get("enable_warnings_hydro"):
                 final_config[CONF_ENABLE_WARNINGS_HYDRO] = True
+
+            # Enhanced warnings (meteo.imgw.pl)
+            if user_input.get("enable_enhanced_warnings_meteo"):
+                if CONF_VOIVODESHIP not in final_config:
+                    voivodeship = self._infer_voivodeship()
+                    final_config[CONF_VOIVODESHIP] = voivodeship
+                final_config[CONF_ENABLE_ENHANCED_WARNINGS_METEO] = True
 
             # Weather forecast
             if user_input.get(CONF_ENABLE_WEATHER_FORECAST):
@@ -302,6 +324,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
         # Warnings
         schema[vol.Optional("enable_warnings_meteo", default=True)] = BooleanSelector()
         schema[vol.Optional("enable_warnings_hydro", default=True)] = BooleanSelector()
+        schema[vol.Optional("enable_enhanced_warnings_meteo", default=False)] = BooleanSelector()
 
         # Powiat filtering checkbox (only if powiat was detected)
         if self._detected_powiat_code and self._detected_powiat_name:
@@ -494,8 +517,23 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 api.get_all_synop_data(),
                 api.get_all_hydro_data(),
                 api.get_all_meteo_data(),
+                return_exceptions=True,
             )
-            synop_data, hydro_data, meteo_data = results
+            synop_data = results[0] if not isinstance(results[0], BaseException) else []
+            hydro_data = results[1] if not isinstance(results[1], BaseException) else []
+            meteo_data = results[2] if not isinstance(results[2], BaseException) else []
+
+            if not synop_data and not hydro_data and not meteo_data:
+                errors["base"] = "cannot_connect"
+                return self.async_show_form(
+                    step_id="manual_start",
+                    data_schema=vol.Schema({
+                        vol.Required("location_name", default=self._data.get("location_name", "")): TextSelector(
+                            TextSelectorConfig(type="text", autocomplete="off")
+                        )
+                    }),
+                    errors=errors,
+                )
 
             # Find nearest for each type independently
             self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
@@ -606,16 +644,25 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                     VOIVODESHIPS.get(voivodeship), voivodeship
                 )
 
-                # Check if user wants powiat-level filtering
-                if user_input.get(CONF_USE_POWIAT_FOR_WARNINGS) and self._detected_powiat_code:
-                    final_config[CONF_POWIAT] = self._detected_powiat_code
-                    final_config[CONF_POWIAT_NAME] = self._detected_powiat_name
-                    final_config[CONF_USE_POWIAT_FOR_WARNINGS] = True
+            # Always store detected powiat data (toggle only controls filtering)
+            if self._detected_powiat_code:
+                final_config[CONF_POWIAT] = self._detected_powiat_code
+                final_config[CONF_POWIAT_NAME] = self._detected_powiat_name
+            final_config[CONF_USE_POWIAT_FOR_WARNINGS] = bool(
+                user_input.get(CONF_USE_POWIAT_FOR_WARNINGS)
+            )
 
             if user_input.get("enable_warnings_meteo"):
                 final_config[CONF_ENABLE_WARNINGS_METEO] = True
             if user_input.get("enable_warnings_hydro"):
                 final_config[CONF_ENABLE_WARNINGS_HYDRO] = True
+
+            # Enhanced warnings (meteo.imgw.pl)
+            if user_input.get("enable_enhanced_warnings_meteo"):
+                if CONF_VOIVODESHIP not in final_config:
+                    voivodeship = self._detected_voivodeship or self._infer_voivodeship_from_coords(self._location_coords)
+                    final_config[CONF_VOIVODESHIP] = voivodeship
+                final_config[CONF_ENABLE_ENHANCED_WARNINGS_METEO] = True
 
             # Weather forecast
             if user_input.get(CONF_ENABLE_WEATHER_FORECAST):
@@ -645,6 +692,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
         # Warnings
         schema[vol.Optional("enable_warnings_meteo", default=True)] = BooleanSelector()
         schema[vol.Optional("enable_warnings_hydro", default=True)] = BooleanSelector()
+        schema[vol.Optional("enable_enhanced_warnings_meteo", default=False)] = BooleanSelector()
 
         # Powiat filtering checkbox (only if powiat was detected)
         if self._detected_powiat_code and self._detected_powiat_name:
@@ -725,6 +773,10 @@ class ImgwPibMonitorOptionsFlow(OptionsFlow):
             new_data = {**self._config_entry.data}
             new_data[CONF_UPDATE_INTERVAL] = user_input[CONF_UPDATE_INTERVAL]
 
+            # Handle powiat filtering toggle
+            if CONF_USE_POWIAT_FOR_WARNINGS in user_input:
+                new_data[CONF_USE_POWIAT_FOR_WARNINGS] = user_input[CONF_USE_POWIAT_FOR_WARNINGS]
+
             # Handle weather forecast toggle
             enable_forecast = user_input.get(CONF_ENABLE_WEATHER_FORECAST, False)
             new_data[CONF_ENABLE_WEATHER_FORECAST] = enable_forecast
@@ -734,6 +786,22 @@ class ImgwPibMonitorOptionsFlow(OptionsFlow):
                 new_data[CONF_FORECAST_LAT] = self.hass.config.latitude
                 new_data[CONF_FORECAST_LON] = self.hass.config.longitude
 
+            # Handle enhanced warnings toggle
+            enable_enhanced = user_input.get(CONF_ENABLE_ENHANCED_WARNINGS_METEO, False)
+            new_data[CONF_ENABLE_ENHANCED_WARNINGS_METEO] = enable_enhanced
+
+            if enable_enhanced and CONF_VOIVODESHIP not in new_data:
+                # First time enabling — infer voivodeship from HA coordinates
+                lat, lon = self.hass.config.latitude, self.hass.config.longitude
+                if lat is not None and lon is not None:
+                    min_d, best_c = float("inf"), None
+                    for c, coords in VOIVODESHIP_CAPITALS.items():
+                        d = haversine(lat, lon, coords[0], coords[1])
+                        if d < min_d:
+                            min_d, best_c = d, c
+                    if best_c:
+                        new_data[CONF_VOIVODESHIP] = best_c
+
             self.hass.config_entries.async_update_entry(
                 self._config_entry, data=new_data
             )
@@ -742,24 +810,43 @@ class ImgwPibMonitorOptionsFlow(OptionsFlow):
         current_forecast = self._config_entry.data.get(
             CONF_ENABLE_WEATHER_FORECAST, False
         )
+        current_enhanced = self._config_entry.data.get(
+            CONF_ENABLE_ENHANCED_WARNINGS_METEO, False
+        )
+
+        schema: dict[vol.Marker, Any] = {}
+
+        schema[vol.Required(
+            CONF_UPDATE_INTERVAL,
+            default=self._config_entry.data.get(
+                CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+            ),
+        )] = vol.All(
+            vol.Coerce(int),
+            vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL),
+        )
+
+        # Show powiat toggle only if powiat was detected during setup
+        if self._config_entry.data.get(CONF_POWIAT):
+            current_use_powiat = self._config_entry.data.get(
+                CONF_USE_POWIAT_FOR_WARNINGS, False
+            )
+            schema[vol.Optional(
+                CONF_USE_POWIAT_FOR_WARNINGS,
+                default=current_use_powiat,
+            )] = BooleanSelector()
+
+        schema[vol.Optional(
+            CONF_ENABLE_WEATHER_FORECAST,
+            default=current_forecast,
+        )] = BooleanSelector()
+
+        schema[vol.Optional(
+            CONF_ENABLE_ENHANCED_WARNINGS_METEO,
+            default=current_enhanced,
+        )] = BooleanSelector()
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_UPDATE_INTERVAL,
-                        default=self._config_entry.data.get(
-                            CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
-                        ),
-                    ): vol.All(
-                        vol.Coerce(int),
-                        vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL),
-                    ),
-                    vol.Optional(
-                        CONF_ENABLE_WEATHER_FORECAST,
-                        default=current_forecast,
-                    ): BooleanSelector(),
-                }
-            ),
+            data_schema=vol.Schema(schema),
         )
