@@ -74,7 +74,7 @@ Weather entity with current conditions, daily and hourly forecast.
 ---
 
 ### Hydrological data
-Measurement sensors (water level, flow, ice phenomenon) and diagnostic sensors (station ID, distance).
+Measurement sensors (water level, flow, water temperature) and diagnostic sensors (station ID, distance).
 
 ![Hydrological data](docs/hydro_data.png)
 
@@ -119,16 +119,14 @@ Manual mode features:
 
 Attributes: station name, station ID, measurement date, measurement time, geographic coordinates, distance
 
-### Hydrological (12 sensors)
+### Hydrological (10 sensors)
 
 | Sensor | Unit | Type |
 |---|---|---|
 | Water level | cm | Measurement |
 | Water flow | m³/s | Measurement |
 | Water temperature | °C | Measurement |
-| Ice phenomenon | code | Informational |
-| Overgrowth phenomenon | code | Informational |
-| Water level state | enum (low/medium/high/warning/alarm) | Informational |
+| Water level state | enum (low/medium/high/warning/alarm/...) | Informational |
 | Water level trend | enum (strongly_falling/.../strongly_rising) | Informational |
 | Distance to warning level | cm | Measurement |
 | Distance to alarm level | cm | Measurement |
@@ -138,7 +136,7 @@ Attributes: station name, station ID, measurement date, measurement time, geogra
 
 Water level sensor attributes: alarm level (`alarm_level`), warning level (`warning_level`).
 
-Extended data fetched from hydro-back API (`hydro-back.imgw.pl`): water state code, trend, alarm and warning thresholds.
+All hydrological data (water level, alarm thresholds, trend, discharge, water temperature) is fetched from hydro-back API (`hydro-back.imgw.pl`) — the same source as the hydro.imgw.pl portal.
 
 ### Meteorological (10 sensors)
 
@@ -547,13 +545,16 @@ If sensors show `unavailable` or `None`:
 
 Data comes from public IMGW-PIB API:
 - `https://danepubliczne.imgw.pl/api/data/synop`
-- `https://danepubliczne.imgw.pl/api/data/hydro`
 - `https://danepubliczne.imgw.pl/api/data/meteo`
 - `https://danepubliczne.imgw.pl/api/data/warningsmeteo`
 - `https://danepubliczne.imgw.pl/api/data/warningshydro`
 
+Hydrological data (hydro-back API — same source as hydro.imgw.pl portal):
+- `https://hydro-back.imgw.pl/list/hydro` (station list, water level, alarm thresholds, trend)
+- `https://hydro-back.imgw.pl/station/hydro/discharge?id=...` (current discharge/flow)
+- `https://hydro-back.imgw.pl/station/hydro/water-temperature?id=...` (water temperature)
+
 Extended data:
-- `https://hydro-back.imgw.pl/station/hydro/status` (alarm levels, hydro trends)
 - `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` (enhanced warnings)
 
 Weather forecast:

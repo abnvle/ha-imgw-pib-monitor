@@ -74,7 +74,7 @@ Encja weather z aktualną pogodą, prognozą dzienną i godzinową.
 ---
 
 ### Dane hydrologiczne
-Sensory pomiarowe (poziom wody, przepływ, zjawisko lodowe) i diagnostyczne (ID stacji, odległość).
+Sensory pomiarowe (poziom wody, przepływ, temperatura wody) i diagnostyczne (ID stacji, odległość).
 
 ![Dane hydrologiczne](docs/hydro_data.png)
 
@@ -119,16 +119,14 @@ Funkcje trybu manualnego:
 
 Atrybuty: nazwa stacji, ID stacji, data pomiaru, godzina pomiaru, współrzędne geograficzne, odległość
 
-### Hydrologiczne (12 sensorów)
+### Hydrologiczne (10 sensorów)
 
 | Sensor | Jednostka | Typ |
 |---|---|---|
 | Stan wody | cm | Pomiar |
 | Przepływ wody | m³/s | Pomiar |
 | Temperatura wody | °C | Pomiar |
-| Zjawisko lodowe | kod | Informacyjny |
-| Zjawisko zarastania | kod | Informacyjny |
-| Stan poziomu wody | enum (low/medium/high/warning/alarm) | Informacyjny |
+| Stan poziomu wody | enum (low/medium/high/warning/alarm/...) | Informacyjny |
 | Trend poziomu wody | enum (strongly_falling/.../strongly_rising) | Informacyjny |
 | Ile do poziomu ostrzegawczego | cm | Pomiar |
 | Ile do poziomu alarmowego | cm | Pomiar |
@@ -138,7 +136,7 @@ Atrybuty: nazwa stacji, ID stacji, data pomiaru, godzina pomiaru, współrzędne
 
 Atrybuty sensora stanu wody: poziom alarmowy (`alarm_level`), poziom ostrzegawczy (`warning_level`).
 
-Dane dodatkowe pobierane z hydro-back API (`hydro-back.imgw.pl`): stan wody (kod stanu), trend, progi alarmowe i ostrzegawcze.
+Wszystkie dane hydrologiczne (stan wody, progi alarmowe, trend, przepływ, temperatura wody) pobierane są z hydro-back API (`hydro-back.imgw.pl`) — tego samego źródła co portal hydro.imgw.pl.
 
 ### Meteorologiczne (10 sensorów)
 
@@ -547,13 +545,16 @@ Jeśli sensory pokazują `unavailable` lub `None`:
 
 Dane pochodzą z publicznego API IMGW-PIB:
 - `https://danepubliczne.imgw.pl/api/data/synop`
-- `https://danepubliczne.imgw.pl/api/data/hydro`
 - `https://danepubliczne.imgw.pl/api/data/meteo`
 - `https://danepubliczne.imgw.pl/api/data/warningsmeteo`
 - `https://danepubliczne.imgw.pl/api/data/warningshydro`
 
+Dane hydrologiczne (hydro-back API — to samo źródło co portal hydro.imgw.pl):
+- `https://hydro-back.imgw.pl/list/hydro` (lista stacji, stan wody, progi alarmowe, trend)
+- `https://hydro-back.imgw.pl/station/hydro/discharge?id=...` (aktualny przepływ)
+- `https://hydro-back.imgw.pl/station/hydro/water-temperature?id=...` (temperatura wody)
+
 Dane rozszerzone:
-- `https://hydro-back.imgw.pl/station/hydro/status` (poziomy alarmowe, trendy hydro)
 - `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` (ostrzeżenia rozszerzone)
 
 Prognoza pogody:

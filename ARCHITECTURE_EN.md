@@ -199,18 +199,23 @@ class ImgwApiClient:
 
     # Public methods (danepubliczne.imgw.pl):
     async def get_all_synop_data() -> list[dict]
-    async def get_all_hydro_data() -> list[dict]
     async def get_all_meteo_data() -> list[dict]
     async def get_warnings_meteo() -> list[dict]
     async def get_warnings_hydro() -> list[dict]
 
+    # Hydrological data (hydro-back.imgw.pl):
+    async def get_all_hydro_data() -> list[dict]
+        # Fetches from /list/hydro — 924 stations with current water level
+        # Dedicated session with User-Agent (hydro-back requires it)
+    async def get_hydro_discharge(station_id) -> dict | None
+        # Current discharge from /station/hydro/discharge
+    async def get_hydro_water_temperature(station_id) -> dict | None
+        # Water temperature from /station/hydro/water-temperature
+    async def get_hydro_station_details(station_id) -> dict
+        # Station details from /station/hydro/status
+
     # Enhanced warnings (meteo.imgw.pl):
     async def get_enhanced_warnings_meteo() -> dict  # TERYT → warnings
-
-    # Enriched hydro data (hydro-back.imgw.pl):
-    async def get_hydro_station_details(station_id) -> dict
-        # Dedicated session with User-Agent (hydro-back requires it)
-        # Alarm levels, warning levels, trend
 
     # Session management:
     def _get_hydro_session() -> aiohttp.ClientSession  # reusable session
@@ -218,7 +223,7 @@ class ImgwApiClient:
 
     # Helper methods:
     async def get_synop_stations() -> dict[str, str]  # id: name
-    async def get_hydro_stations() -> dict[str, str]  # id: "name (river)"
+    async def get_hydro_stations() -> dict[str, str]  # code: "name (river)"
     async def get_meteo_stations() -> dict[str, str]  # code: name
 ```
 
@@ -248,17 +253,15 @@ SensorEntity (Home Assistant)
 - Contains: station ID, distance
 - Not displayed in main view
 
-**Informational** (15 sensors):
+**Informational** (13 sensors):
 - Warnings: max_level, latest_event, latest_level, latest_probability, latest_valid_from, latest_valid_to, latest_content/description
-- Hydro: ice_phenomenon, overgrowth
 
-**Enriched hydro** (6 sensors, from hydro-back API):
-- Water level status (enum: low/medium/high/warning/alarm)
+**Hydro** (5 sensors, from hydro-back API):
+- Water level status (enum: low/medium/high/warning/alarm/below/unknown/...)
 - Water level trend (enum: strongly_falling → strongly_rising)
 - Distance to warning level (cm)
 - Distance to alarm level (cm)
 - Water alarm status (enum: none/warning/alarm)
-- Overgrowth phenomenon (boolean)
 - Attributes: alarm and warning levels
 
 **Enhanced warnings** (6 sensors):
@@ -404,7 +407,7 @@ SYNOP_STATIONS: dict[str, tuple[float, float]] = {
 **Reason**: API doesn't return coordinates for synoptic stations
 
 #### HYDRO and METEO stations
-Coordinates fetched directly from API (`lat` / `lon`).
+Coordinates fetched directly from API (`latitude` / `longitude` for hydro-back, `lat` / `lon` for meteo).
 
 #### Voivodeship capitals
 ```python
@@ -615,12 +618,14 @@ for k, v in raw_attrs.items():
 | Module | Endpoint | Format | Data |
 |--------|----------|--------|------|
 | Synop | `https://danepubliczne.imgw.pl/api/data/synop` | JSON | List of stations with measurements |
-| Hydro | `https://danepubliczne.imgw.pl/api/data/hydro` | JSON | List of stations with hydrological data |
+| Hydro (list) | `https://hydro-back.imgw.pl/list/hydro` | JSON | 924 stations with current water level, thresholds, trend |
+| Hydro (discharge) | `https://hydro-back.imgw.pl/station/hydro/discharge?id=...` | JSON | Current discharge/flow (per station) |
+| Hydro (water temp) | `https://hydro-back.imgw.pl/station/hydro/water-temperature?id=...` | JSON | Water temperature (per station) |
 | Meteo | `https://danepubliczne.imgw.pl/api/data/meteo` | JSON | List of meteorological stations |
 | Warnings Meteo | `https://danepubliczne.imgw.pl/api/data/warningsmeteo` | JSON | Warnings with TERYT codes |
 | Warnings Hydro | `https://danepubliczne.imgw.pl/api/data/warningshydro` | JSON | Warnings with area list |
 | Enhanced Warnings | `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` | JSON | Enhanced warnings (16 phenomena, 3 levels) |
-| Hydro-back | `https://hydro-back.imgw.pl/station/hydro/status?id=...` | JSON | Alarm levels, warning levels, trend |
+| Hydro (details) | `https://hydro-back.imgw.pl/station/hydro/status?id=...` | JSON | Station details (per station) |
 | Forecast | `https://imgw-api-proxy.evtlab.pl/forecast` | JSON | Weather forecast (current, daily, hourly) |
 
 ## Technical Requirements
@@ -632,9 +637,9 @@ for k, v in raw_attrs.items():
 - **Platforms**: `sensor`, `binary_sensor`, `weather` (optional)
 - **Config version**: 10 (with automatic migration from older versions 1-9)
 - **Network**: Access to:
-  - `danepubliczne.imgw.pl` (measurement data and warnings)
+  - `danepubliczne.imgw.pl` (synoptic, meteo data and warnings)
+  - `hydro-back.imgw.pl` (hydrological data — water level, discharge, temperature, alarm thresholds, trend)
   - `meteo.imgw.pl` (enhanced warnings — conditionally)
-  - `hydro-back.imgw.pl` (enriched hydro data — alarm levels, trend)
   - `imgw-api-proxy.evtlab.pl` (location search, TERYT codes, weather forecast)
   - `nominatim.openstreetmap.org` (reverse geocoding in auto-discovery mode)
 
@@ -644,7 +649,7 @@ for k, v in raw_attrs.items():
 - No official limits
 - Integration uses rate limiting (2 req + 200ms) as best practice
 - Global coordinator: 5-7 requests per update cycle (enhanced warnings conditionally)
-- Instance coordinator: 1 request to hydro-back per hydro station per cycle
+- Instance coordinator: 2 requests to hydro-back per hydro station per cycle (discharge + water temperature)
 
 ### IMGW API Proxy Limits
 - No official limits for location search

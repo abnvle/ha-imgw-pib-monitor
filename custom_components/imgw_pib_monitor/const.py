@@ -19,9 +19,12 @@ API_ENDPOINT_METEO: Final = f"{API_BASE_URL}/meteo"
 API_ENDPOINT_WARNINGS_METEO: Final = f"{API_BASE_URL}/warningsmeteo"
 API_ENDPOINT_WARNINGS_HYDRO: Final = f"{API_BASE_URL}/warningshydro"
 
-# Hydro-back API (extended hydrological data: alarm levels, trends)
+# Hydro-back API (primary source for hydrological data)
 API_HYDRO_BACK_BASE_URL: Final = "https://hydro-back.imgw.pl"
+API_HYDRO_BACK_LIST_URL: Final = f"{API_HYDRO_BACK_BASE_URL}/list/hydro"
 API_HYDRO_BACK_STATION_URL: Final = f"{API_HYDRO_BACK_BASE_URL}/station/hydro/status"
+API_HYDRO_BACK_DISCHARGE_URL: Final = f"{API_HYDRO_BACK_BASE_URL}/station/hydro/discharge"
+API_HYDRO_BACK_WATER_TEMP_URL: Final = f"{API_HYDRO_BACK_BASE_URL}/station/hydro/water-temperature"
 
 # Trend code mapping from hydro-back API
 HYDRO_TREND_MAP: Final[dict[int, str]] = {

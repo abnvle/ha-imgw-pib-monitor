@@ -102,16 +102,9 @@ class TestHydroSensorValues:
         sensor = next(s for s in HYDRO_SENSORS if s.key == "water_temperature")
         assert sensor.value_fn(self.data) == 4.5
 
-    def test_ice_phenomenon(self):
-        sensor = next(s for s in HYDRO_SENSORS if s.key == "ice_phenomenon")
-        assert sensor.value_fn(self.data) == 0
-
-    def test_overgrowth(self):
-        sensor = next(s for s in HYDRO_SENSORS if s.key == "overgrowth")
-        assert sensor.value_fn(self.data) == 0
-
     def test_water_level_alarm_none_when_no_thresholds(self):
         sensor = next(s for s in HYDRO_SENSORS if s.key == "water_level_alarm")
+        # Data has alarm_level=650 and warning_level=550, water_level=250 → "none"
         assert sensor.value_fn(self.data) == "none"
 
     def test_water_level_alarm_warning(self):
@@ -192,10 +185,17 @@ class TestWarningsMeteoSensorValues:
         assert len(result) <= 255
 
     def test_no_latest_warning(self):
-        """When no warnings, latest fields return None."""
+        """When no warnings, latest fields return sensible defaults instead of None."""
         empty_data = {"active_warnings_count": 0, "max_level": 0, "warnings": [], "latest_warning": None}
-        sensor = next(s for s in WARNINGS_METEO_SENSORS if s.key == "warnings_meteo_latest_event")
-        assert sensor.value_fn(empty_data) is None
+        # Text sensors return empty string
+        for key in ("warnings_meteo_latest_event", "warnings_meteo_latest_valid_from",
+                     "warnings_meteo_latest_valid_to", "warnings_meteo_latest_content"):
+            sensor = next(s for s in WARNINGS_METEO_SENSORS if s.key == key)
+            assert sensor.value_fn(empty_data) == "", f"{key} should return '' when no warnings"
+        # Numeric sensors return 0
+        for key in ("warnings_meteo_latest_level", "warnings_meteo_latest_probability"):
+            sensor = next(s for s in WARNINGS_METEO_SENSORS if s.key == key)
+            assert sensor.value_fn(empty_data) == 0, f"{key} should return 0 when no warnings"
 
     def test_extra_attrs_fn(self):
         sensor = next(s for s in WARNINGS_METEO_SENSORS if s.key == "warnings_meteo_count")
@@ -229,6 +229,19 @@ class TestWarningsHydroSensorValues:
         result = sensor.value_fn(self.data)
         assert result is not None
         assert len(result) <= 255
+
+    def test_no_latest_warning(self):
+        """When no warnings, latest fields return sensible defaults instead of None."""
+        empty_data = {"active_warnings_count": 0, "max_level": 0, "warnings": [], "latest_warning": None}
+        # Text sensors return empty string
+        for key in ("warnings_hydro_latest_event", "warnings_hydro_latest_valid_from",
+                     "warnings_hydro_latest_valid_to", "warnings_hydro_latest_description"):
+            sensor = next(s for s in WARNINGS_HYDRO_SENSORS if s.key == key)
+            assert sensor.value_fn(empty_data) == "", f"{key} should return '' when no warnings"
+        # Numeric sensors return 0
+        for key in ("warnings_hydro_latest_level", "warnings_hydro_latest_probability"):
+            sensor = next(s for s in WARNINGS_HYDRO_SENSORS if s.key == key)
+            assert sensor.value_fn(empty_data) == 0, f"{key} should return 0 when no warnings"
 
 
 # ── Sensor description sanity checks ─────────────────────────
@@ -277,7 +290,7 @@ class TestSensorDescriptionIntegrity:
         assert len(SYNOP_SENSORS) == 8
 
     def test_hydro_sensor_count(self):
-        assert len(HYDRO_SENSORS) == 12
+        assert len(HYDRO_SENSORS) == 10
 
     def test_meteo_sensor_count(self):
         assert len(METEO_SENSORS) == 10

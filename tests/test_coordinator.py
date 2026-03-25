@@ -152,28 +152,59 @@ class TestParseSynop:
 
 
 class TestParseHydro:
-    """Tests for hydrological data parsing."""
+    """Tests for hydrological data parsing (hydro-back format)."""
 
     def test_parses_complete_data(self):
         stub = _make_coordinator_stub()
         result = stub._parse_hydro(SAMPLE_HYDRO_DATA[0])
 
-        assert result["station_name"] == "Warszawa"
+        assert result["station_name"] == "WARSZAWA"
+        assert result["station_id"] == "150190370"
         assert result["river"] == "Wisła"
         assert result["water_level"] == 250
-        assert result["water_temperature"] == 4.5
-        assert result["flow"] == 350.5
         assert result["latitude"] == 52.2297
         assert result["longitude"] == 21.0122
+        assert result["water_level_state"] == "medium"
+        assert result["water_level_trend"] == "stable"
+        assert result["alarm_level"] == 650.0
+        assert result["warning_level"] == 550.0
+        assert result["alarm_remaining"] == 400.0
+        assert result["warning_remaining"] == 300.0
+        # Flow and temperature are populated later from per-station endpoints
+        assert result["flow"] is None
+        assert result["water_temperature"] is None
 
     def test_handles_missing_fields(self):
         stub = _make_coordinator_stub()
-        result = stub._parse_hydro({"stacja": "Test"})
+        result = stub._parse_hydro({"name": "Test", "code": "999"})
 
         assert result["station_name"] == "Test"
         assert result["water_level"] is None
         assert result["flow"] is None
         assert result["latitude"] is None
+
+    def test_handles_empty_dict(self):
+        stub = _make_coordinator_stub()
+        result = stub._parse_hydro({})
+
+        assert result["station_name"] is None
+        assert result["water_level"] is None
+
+    def test_river_code_stripped(self):
+        """River field like 'Dunajec (214)' should strip the code."""
+        stub = _make_coordinator_stub()
+        result = stub._parse_hydro({"river": "Dunajec (214)"})
+        assert result["river"] == "Dunajec"
+
+    def test_no_alarm_values(self):
+        stub = _make_coordinator_stub()
+        result = stub._parse_hydro({
+            "currentState": {"date": "2024-01-15T12:00:00Z", "value": 100.0},
+            "alarmValue": None,
+            "warningValue": None,
+        })
+        assert result["alarm_remaining"] is None
+        assert result["warning_remaining"] is None
 
 
 # ── _parse_meteo ──────────────────────────────────────────────

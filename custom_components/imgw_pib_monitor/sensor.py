@@ -189,24 +189,15 @@ HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: data.get("water_temperature"),
     ),
     ImgwSensorEntityDescription(
-        key="ice_phenomenon",
-        translation_key="hydro_ice_phenomenon",
-        icon="mdi:snowflake",
-        value_fn=lambda data: data.get("ice_phenomenon"),
-        always_create=True,
-    ),
-    ImgwSensorEntityDescription(
-        key="overgrowth",
-        translation_key="hydro_overgrowth",
-        icon="mdi:grass",
-        value_fn=lambda data: data.get("overgrowth"),
-        always_create=True,
-    ),
-    ImgwSensorEntityDescription(
         key="water_level_state",
         translation_key="hydro_water_level_state",
         device_class=SensorDeviceClass.ENUM,
-        options=["low", "medium", "high", "warning", "alarm"],
+        options=[
+            "low", "medium", "high", "warning", "alarm",
+            "below", "unknown",
+            "lowOutdated", "mediumOutdated", "highOutdated",
+            "no-char-states", "no-water-state-data",
+        ],
         icon="mdi:waves-arrow-up",
         value_fn=lambda data: data.get("water_level_state"),
     ),
@@ -387,7 +378,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
                 w["event"]
                 for w in data.get("warnings", [])
                 if w.get("event")
-            )[:255] or None
+            )[:255] or ""
         ),
         always_create=True,
     ),
@@ -398,7 +389,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data["latest_warning"]["level"]
             if data.get("latest_warning")
-            else None
+            else 0
         ),
         always_create=True,
     ),
@@ -410,7 +401,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data["latest_warning"]["probability"]
             if data.get("latest_warning")
-            else None
+            else 0
         ),
         always_create=True,
     ),
@@ -421,7 +412,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data["latest_warning"]["valid_from"]
             if data.get("latest_warning")
-            else None
+            else ""
         ),
         always_create=True,
     ),
@@ -432,7 +423,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data["latest_warning"]["valid_to"]
             if data.get("latest_warning")
-            else None
+            else ""
         ),
         always_create=True,
     ),
@@ -445,7 +436,7 @@ WARNINGS_METEO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
                 w["content"]
                 for w in data.get("warnings", [])
                 if w.get("content")
-            )[:255] or None
+            )[:255] or ""
         ),
         always_create=True,
     ),
@@ -477,7 +468,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
                 w.get("event") or (w.get("description") or "")[:80]
                 for w in data.get("warnings", [])
                 if w.get("event") or w.get("description")
-            )[:255] or None
+            )[:255] or ""
         ),
         always_create=True,
     ),
@@ -488,7 +479,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data["latest_warning"]["level"]
             if data.get("latest_warning")
-            else None
+            else 0
         ),
         always_create=True,
     ),
@@ -500,7 +491,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data["latest_warning"]["probability"]
             if data.get("latest_warning")
-            else None
+            else 0
         ),
         always_create=True,
     ),
@@ -511,7 +502,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data["latest_warning"]["valid_from"]
             if data.get("latest_warning")
-            else None
+            else ""
         ),
         always_create=True,
     ),
@@ -522,7 +513,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             data["latest_warning"]["valid_to"]
             if data.get("latest_warning")
-            else None
+            else ""
         ),
         always_create=True,
     ),
@@ -535,7 +526,7 @@ WARNINGS_HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
                 w["description"]
                 for w in data.get("warnings", [])
                 if w.get("description")
-            )[:255] or None
+            )[:255] or ""
         ),
         always_create=True,
     ),
@@ -583,7 +574,7 @@ WARNINGS_METEO_ENHANCED_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         translation_key="enh_warnings_present_phenomena",
         icon="mdi:weather-lightning",
         value_fn=lambda data: (
-            ", ".join(data.get("present_phenomena", []))[:255] or None
+            ", ".join(data.get("present_phenomena", []))[:255] or ""
         ),
         always_create=True,
     ),
@@ -592,7 +583,7 @@ WARNINGS_METEO_ENHANCED_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         translation_key="enh_warnings_active_phenomena",
         icon="mdi:weather-lightning",
         value_fn=lambda data: (
-            ", ".join(data.get("active_phenomena", []))[:255] or None
+            ", ".join(data.get("active_phenomena", []))[:255] or ""
         ),
         always_create=True,
     ),

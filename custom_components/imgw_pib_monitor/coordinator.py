@@ -216,42 +216,33 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     result[DATA_TYPE_SYNOP][sid] = parsed
                     break
 
-        # 2. Hydro
+        # 2. Hydro (from hydro-back.imgw.pl/list/hydro)
         for sid in self.config_data.get(CONF_SELECTED_HYDRO, []):
             for item in global_data.get(DATA_TYPE_HYDRO, []):
-                if str(item.get("id_stacji")) == str(sid):
+                if str(item.get("code")) == str(sid):
                     parsed = self._parse_hydro(item)
                     if ha_lat and ha_lon and parsed.get("latitude") and parsed.get("longitude"):
                         parsed["distance"] = round(haversine(ha_lat, ha_lon, parsed["latitude"], parsed["longitude"]), 1)
                     result[DATA_TYPE_HYDRO][sid] = parsed
                     break
 
-        # 2b. Enrich hydro data with alarm levels and trend from hydro-back API
+        # 2b. Enrich hydro with discharge and water temperature from per-station endpoints
         for sid, parsed in result[DATA_TYPE_HYDRO].items():
-            details = await self.global_coordinator.api.get_hydro_station_details(str(sid))
-            if details:
-                status = details.get("status") or {}
-                alarm_val = self._safe_int(status.get("alarmValue"))
-                warning_val = self._safe_int(status.get("warningValue"))
-                water_level = parsed.get("water_level")
+            discharge = await self.global_coordinator.api.get_hydro_discharge(str(sid))
+            if discharge:
+                parsed["flow"] = self._safe_float(discharge.get("value"))
+                parsed["flow_date"] = discharge.get("date")
 
-                parsed["alarm_level"] = alarm_val
-                parsed["warning_level"] = warning_val
-                parsed["water_level_state"] = details.get("stateCode")
-                trend_code = status.get("trend")
-                parsed["water_level_trend"] = HYDRO_TREND_MAP.get(trend_code) if trend_code is not None else None
+            water_temp = await self.global_coordinator.api.get_hydro_water_temperature(str(sid))
+            if water_temp:
+                parsed["water_temperature"] = self._safe_float(water_temp.get("value"))
+                parsed["water_temperature_date"] = water_temp.get("date")
 
-                # Calculate remaining cm to thresholds
-                if water_level is not None and alarm_val is not None:
-                    parsed["alarm_remaining"] = alarm_val - water_level
-                if water_level is not None and warning_val is not None:
-                    parsed["warning_remaining"] = warning_val - water_level
-
-                _LOGGER.debug(
-                    "Hydro-back: station %s — state=%s, trend=%s, alarm_remaining=%s, warning_remaining=%s",
-                    sid, parsed.get("water_level_state"), parsed.get("water_level_trend"),
-                    parsed.get("alarm_remaining"), parsed.get("warning_remaining"),
-                )
+            _LOGGER.debug(
+                "Hydro-back: station %s — state=%s, trend=%s, flow=%s, water_temp=%s",
+                sid, parsed.get("water_level_state"), parsed.get("water_level_trend"),
+                parsed.get("flow"), parsed.get("water_temperature"),
+            )
             await asyncio.sleep(0.1)
 
         # 3. Meteo
@@ -361,8 +352,8 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 except (ValueError, TypeError):
                     continue
             if nearest and nearest_station:
-                station_name = nearest_station.get("stacja") or nearest_station.get("nazwa_stacji") or "Unknown"
-                river = nearest_station.get("rzeka", "")
+                station_name = nearest_station.get("stacja") or nearest_station.get("nazwa_stacji") or nearest_station.get("name") or "Unknown"
+                river = nearest_station.get("rzeka") or nearest_station.get("river", "")
                 river_info = f" ({river})" if river else ""
                 _LOGGER.debug(
                     "Auto-selected %s station '%s'%s (ID: %s) at %.2f km",
@@ -371,7 +362,7 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return nearest
 
         ns = find_nearest_synop(global_data.get(DATA_TYPE_SYNOP, []))
-        nh = find_nearest(global_data.get(DATA_TYPE_HYDRO, []), "lat", "lon", "id_stacji", "HYDRO")
+        nh = find_nearest(global_data.get(DATA_TYPE_HYDRO, []), "latitude", "longitude", "code", "HYDRO")
         nm = find_nearest(global_data.get(DATA_TYPE_METEO, []), "lat", "lon", "kod_stacji", "METEO")
 
         # Only update station types that were originally selected by the user
@@ -411,24 +402,46 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
     def _parse_hydro(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Safely parse hydrological data."""
+        """Safely parse hydrological data from hydro-back API."""
+        current_state = data.get("currentState") or {}
+        river_raw = data.get("river", "")
+        # Strip code suffix, e.g. "Dunajec (214)" → "Dunajec"
+        river = river_raw.split("(")[0].strip() if river_raw else ""
+
+        alarm_val = self._safe_float(data.get("alarmValue"))
+        warning_val = self._safe_float(data.get("warningValue"))
+        water_level = self._safe_float(current_state.get("value"))
+
+        trend_code = data.get("trend")
+        water_level_trend = HYDRO_TREND_MAP.get(trend_code) if trend_code is not None else None
+
+        alarm_remaining = None
+        warning_remaining = None
+        if water_level is not None and alarm_val is not None:
+            alarm_remaining = alarm_val - water_level
+        if water_level is not None and warning_val is not None:
+            warning_remaining = warning_val - water_level
+
         return {
-            "station_name": data.get("stacja"),
-            "station_id": data.get("id_stacji"),
-            "river": data.get("rzeka"),
-            "voivodeship": data.get("wojewodztwo"),
-            "longitude": self._safe_float(data.get("lon")),
-            "latitude": self._safe_float(data.get("lat")),
-            "water_level": self._safe_int(data.get("stan_wody")),
-            "water_level_date": data.get("stan_wody_data_pomiaru"),
-            "water_temperature": self._safe_float(data.get("temperatura_wody")),
-            "water_temperature_date": data.get("temperatura_wody_data_pomiaru"),
-            "flow": self._safe_float(data.get("przelyw")),
-            "flow_date": data.get("przeplyw_data"),
-            "ice_phenomenon": self._safe_int(data.get("zjawisko_lodowe")),
-            "ice_phenomenon_date": data.get("zjawisko_lodowe_data_pomiaru"),
-            "overgrowth": self._safe_int(data.get("zjawisko_zarastania")),
-            "overgrowth_date": data.get("zjawisko_zarastania_data_pomiaru"),
+            "station_name": data.get("name"),
+            "station_id": data.get("code"),
+            "river": river,
+            "voivodeship": data.get("province"),
+            "longitude": self._safe_float(data.get("longitude")),
+            "latitude": self._safe_float(data.get("latitude")),
+            "water_level": self._safe_int(current_state.get("value")),
+            "water_level_date": current_state.get("date"),
+            "water_level_state": data.get("statusCode"),
+            "water_level_trend": water_level_trend,
+            "alarm_level": alarm_val,
+            "warning_level": warning_val,
+            "alarm_remaining": alarm_remaining,
+            "warning_remaining": warning_remaining,
+            # Populated later from per-station endpoints
+            "water_temperature": None,
+            "water_temperature_date": None,
+            "flow": None,
+            "flow_date": None,
         }
 
     def _parse_meteo(self, data: dict[str, Any]) -> dict[str, Any]:

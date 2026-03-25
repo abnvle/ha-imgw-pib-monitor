@@ -8,12 +8,14 @@ from typing import Any
 import aiohttp
 
 from .const import (
-    API_ENDPOINT_HYDRO,
     API_ENDPOINT_METEO,
     API_ENDPOINT_SYNOP,
     API_ENDPOINT_WARNINGS_HYDRO,
     API_ENDPOINT_WARNINGS_METEO,
+    API_HYDRO_BACK_DISCHARGE_URL,
+    API_HYDRO_BACK_LIST_URL,
     API_HYDRO_BACK_STATION_URL,
+    API_HYDRO_BACK_WATER_TEMP_URL,
     API_METEO_IMGW_OSMET_URL,
 )
 
@@ -59,13 +61,37 @@ class ImgwApiClient:
             return []
         return data
 
+    async def _fetch_hydro_back(self, url: str, endpoint_name: str) -> list[dict[str, Any]] | dict[str, Any]:
+        """Fetch data from hydro-back API using dedicated session."""
+        try:
+            session = self._get_hydro_session()
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    _LOGGER.warning(
+                        "Hydro-back %s returned status %s",
+                        endpoint_name,
+                        resp.status,
+                    )
+                    return []
+                return await resp.json()
+        except Exception as err:
+            _LOGGER.warning(
+                "Hydro-back %s unavailable: %s",
+                endpoint_name,
+                err,
+            )
+            return []
+
     async def get_all_synop_data(self) -> list[dict[str, Any]]:
         """Get synoptic data for all stations."""
         return await self._fetch_list(API_ENDPOINT_SYNOP, "synop")
 
     async def get_all_hydro_data(self) -> list[dict[str, Any]]:
-        """Get hydrological data for all stations."""
-        return await self._fetch_list(API_ENDPOINT_HYDRO, "hydro")
+        """Get hydrological data for all stations from hydro-back API."""
+        data = await self._fetch_hydro_back(API_HYDRO_BACK_LIST_URL, "hydro_list")
+        if not isinstance(data, list):
+            return []
+        return data
 
     async def get_all_meteo_data(self) -> list[dict[str, Any]]:
         """Get meteorological data for all stations."""
@@ -100,13 +126,15 @@ class ImgwApiClient:
         }
 
     async def get_hydro_stations(self) -> dict[str, str]:
-        """Return {id: 'name (river)'} for all hydro stations."""
+        """Return {code: 'name (river)'} for all hydro stations."""
         data = await self.get_all_hydro_data()
         stations: dict[str, str] = {}
         for item in data:
-            sid = item.get("id_stacji")
-            name = item.get("stacja")
-            river = item.get("rzeka", "")
+            sid = item.get("code")
+            name = item.get("name")
+            river_raw = item.get("river", "")
+            # River field contains code in parentheses, e.g. "Dunajec (214)" — strip it
+            river = river_raw.split("(")[0].strip() if river_raw else ""
             if sid and name:
                 label = f"{name} ({river})" if river else name
                 stations[sid] = label
@@ -121,7 +149,7 @@ class ImgwApiClient:
         """
         if self._hydro_session is None or self._hydro_session.closed:
             self._hydro_session = aiohttp.ClientSession(
-                headers={"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.1.0"},
+                headers={"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.1.1"},
                 timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._hydro_session
@@ -135,27 +163,36 @@ class ImgwApiClient:
     async def get_hydro_station_details(self, station_id: str) -> dict[str, Any]:
         """Get extended hydro data (alarm levels, trend) from hydro-back API."""
         url = f"{API_HYDRO_BACK_STATION_URL}?id={station_id}"
-        try:
-            session = self._get_hydro_session()
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    _LOGGER.warning(
-                        "Hydro-back API returned status %s for station %s",
-                        resp.status,
-                        station_id,
-                    )
-                    return {}
-                data = await resp.json()
-                if isinstance(data, dict):
-                    return data
-                return {}
-        except Exception as err:
-            _LOGGER.warning(
-                "Hydro-back API unavailable for station %s: %s",
-                station_id,
-                err,
-            )
-            return {}
+        data = await self._fetch_hydro_back(url, f"station_details/{station_id}")
+        return data if isinstance(data, dict) else {}
+
+    async def get_hydro_discharge(self, station_id: str) -> dict[str, Any] | None:
+        """Get current discharge (flow) for a hydro station.
+
+        Returns the latest operational measurement as {date, value} or None.
+        """
+        url = f"{API_HYDRO_BACK_DISCHARGE_URL}?id={station_id}&hoursInterval=6"
+        data = await self._fetch_hydro_back(url, f"discharge/{station_id}")
+        if not isinstance(data, dict):
+            return None
+        operational = data.get("operational")
+        if operational and isinstance(operational, list):
+            return operational[-1]  # Latest measurement
+        return None
+
+    async def get_hydro_water_temperature(self, station_id: str) -> dict[str, Any] | None:
+        """Get current water temperature for a hydro station.
+
+        Returns the latest operational measurement as {date, value} or None.
+        """
+        url = f"{API_HYDRO_BACK_WATER_TEMP_URL}?id={station_id}&hoursInterval=6"
+        data = await self._fetch_hydro_back(url, f"water_temp/{station_id}")
+        if not isinstance(data, dict):
+            return None
+        operational = data.get("operational")
+        if operational and isinstance(operational, list):
+            return operational[-1]  # Latest measurement
+        return None
 
     async def get_meteo_stations(self) -> dict[str, str]:
         """Return {code: name} for all meteo stations."""

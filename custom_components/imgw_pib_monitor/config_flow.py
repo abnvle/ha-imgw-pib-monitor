@@ -189,7 +189,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
 
             # Find nearest for each type independently
             self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
-            self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "lat", "lon", "id_stacji")
+            self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "latitude", "longitude", "code")
             self._nearest_meteo = _find_nearest_station(meteo_data, lat, lon, "lat", "lon", "kod_stacji")
             self._location_coords = (lat, lon)
 
@@ -537,7 +537,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
 
             # Find nearest for each type independently
             self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
-            self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "lat", "lon", "id_stacji")
+            self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "latitude", "longitude", "code")
             self._nearest_meteo = _find_nearest_station(meteo_data, lat, lon, "lat", "lon", "kod_stacji")
 
             if not self._nearest_synop and not self._nearest_hydro and not self._nearest_meteo:

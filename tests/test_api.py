@@ -87,26 +87,49 @@ class TestImgwApiClientSynop:
 
 
 class TestImgwApiClientHydro:
-    """Tests for hydrological data methods."""
+    """Tests for hydrological data methods (hydro-back API)."""
 
     @pytest.mark.asyncio
     async def test_get_all_hydro_data(self):
-        session = _make_mock_session(SAMPLE_HYDRO_DATA)
+        """Hydro data is fetched via hydro-back dedicated session."""
+        session = _make_mock_session([])  # main session not used for hydro
         client = ImgwApiClient(session)
+        # Mock the hydro session
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value=SAMPLE_HYDRO_DATA)
+        mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+        mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+        mock_hydro_session = MagicMock(spec=aiohttp.ClientSession)
+        mock_hydro_session.closed = False
+        mock_hydro_session.get = MagicMock(return_value=mock_resp)
+        client._hydro_session = mock_hydro_session
 
         result = await client.get_all_hydro_data()
         assert len(result) == 1
-        assert result[0]["stacja"] == "Warszawa"
+        assert result[0]["name"] == "WARSZAWA"
 
     @pytest.mark.asyncio
     async def test_get_hydro_stations_includes_river(self):
-        session = _make_mock_session(SAMPLE_HYDRO_DATA)
+        session = _make_mock_session([])
         client = ImgwApiClient(session)
+        # Mock the hydro session
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value=SAMPLE_HYDRO_DATA)
+        mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+        mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+        mock_hydro_session = MagicMock(spec=aiohttp.ClientSession)
+        mock_hydro_session.closed = False
+        mock_hydro_session.get = MagicMock(return_value=mock_resp)
+        client._hydro_session = mock_hydro_session
 
         result = await client.get_hydro_stations()
         assert "150190370" in result
         assert "Wisła" in result["150190370"]
-        assert "Warszawa" in result["150190370"]
+        assert "WARSZAWA" in result["150190370"]
 
 
 class TestImgwApiClientMeteo:
