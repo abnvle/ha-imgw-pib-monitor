@@ -166,6 +166,22 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return data
 
 
+_STATUS_CODE_MAP: dict[str, str] = {
+    "lowOutdated": "low_outdated",
+    "mediumOutdated": "medium_outdated",
+    "highOutdated": "high_outdated",
+    "no-char-states": "no_data",
+    "no-water-state-data": "no_data",
+}
+
+
+def _normalize_status_code(code: str | None) -> str | None:
+    """Map API statusCode to HA-compatible enum value (lowercase, no camelCase/hyphens)."""
+    if code is None:
+        return None
+    return _STATUS_CODE_MAP.get(code, code)
+
+
 class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator for a specific config entry serving sensors."""
 
@@ -463,7 +479,7 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "latitude": self._safe_float(data.get("latitude")),
             "water_level": round(self._safe_float(current_state.get("value"))) if current_state.get("value") is not None else None,
             "water_level_date": current_state.get("date"),
-            "water_level_state": data.get("statusCode"),
+            "water_level_state": _normalize_status_code(data.get("statusCode")),
             "water_level_trend": water_level_trend,
             "alarm_level": alarm_val,
             "warning_level": warning_val,

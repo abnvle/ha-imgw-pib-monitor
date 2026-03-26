@@ -195,8 +195,8 @@ HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         options=[
             "low", "medium", "high", "warning", "alarm",
             "below", "unknown",
-            "lowOutdated", "mediumOutdated", "highOutdated",
-            "no-char-states", "no-water-state-data",
+            "low_outdated", "medium_outdated", "high_outdated",
+            "no_data",
         ],
         icon="mdi:waves-arrow-up",
         value_fn=lambda data: data.get("water_level_state"),

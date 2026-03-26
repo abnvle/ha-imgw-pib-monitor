@@ -130,11 +130,10 @@
           "alarm": "Alarmowy",
           "below": "Poniżej niskiego",
           "unknown": "Nieznany",
-          "lowOutdated": "Niski (nieaktualny)",
-          "mediumOutdated": "Średni (nieaktualny)",
-          "highOutdated": "Wysoki (nieaktualny)",
-          "no-char-states": "Brak danych",
-          "no-water-state-data": "Brak danych"
+          "low_outdated": "Niski (nieaktualny)",
+          "medium_outdated": "Średni (nieaktualny)",
+          "high_outdated": "Wysoki (nieaktualny)",
+          "no_data": "Brak danych"
         }
       },
       "hydro_water_level_trend": {
