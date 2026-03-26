@@ -10,6 +10,8 @@ import aiohttp
 from .const import (
     API_ENDPOINT_METEO,
     API_ENDPOINT_SYNOP,
+    FORECAST_API_URL,
+    USER_AGENT,
     API_ENDPOINT_WARNINGS_HYDRO,
     API_ENDPOINT_WARNINGS_METEO,
     API_HYDRO_BACK_DISCHARGE_URL,
@@ -125,6 +127,29 @@ class ImgwApiClient:
             if item.get("id_stacji") and item.get("stacja")
         }
 
+    async def get_synop_station_coords(self) -> dict[str, tuple[float, float]]:
+        """Return {station_id: (lat, lon)} for synoptic stations from IMGW API Proxy.
+
+        Falls back to empty dict on failure — callers should use SYNOP_STATIONS as fallback.
+        """
+        url = f"{FORECAST_API_URL}/stations/synop"
+        try:
+            async with self._session.get(
+                url, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status != 200:
+                    _LOGGER.warning("Station coords API returned %s", resp.status)
+                    return {}
+                data = await resp.json()
+                return {
+                    sid: (s["lat"], s["lon"])
+                    for sid, s in data.items()
+                    if s.get("lat") and s.get("lon")
+                }
+        except Exception as err:
+            _LOGGER.debug("Station coords unavailable: %s", err)
+            return {}
+
     async def get_hydro_stations(self) -> dict[str, str]:
         """Return {code: 'name (river)'} for all hydro stations."""
         data = await self.get_all_hydro_data()
@@ -149,7 +174,7 @@ class ImgwApiClient:
         """
         if self._hydro_session is None or self._hydro_session.closed:
             self._hydro_session = aiohttp.ClientSession(
-                headers={"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.1.1"},
+                headers={"User-Agent": USER_AGENT},
                 timeout=aiohttp.ClientTimeout(total=30),
             )
         return self._hydro_session

@@ -19,7 +19,8 @@
           "enable_warnings_hydro": "Włącz ostrzeżenia hydrologiczne",
           "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
-          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)"
+          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)",
+          "radar_type": "Mapa radarowa"
         }
       },
       "manual_start": {
@@ -47,7 +48,8 @@
           "enable_warnings_hydro": "Włącz ostrzeżenia hydrologiczne",
           "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
-          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)"
+          "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)",
+          "radar_type": "Mapa radarowa"
         }
       },
       "select": {
@@ -91,7 +93,8 @@
           "update_interval": "Interwał aktualizacji (minuty)",
           "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
           "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)",
-          "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)"
+          "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)",
+          "radar_type": "Mapa radarowa"
         }
       }
     }
@@ -117,8 +120,6 @@
       "hydro_water_level": { "name": "Poziom wody{station_suffix}" },
       "hydro_flow": { "name": "Przepływ{station_suffix}" },
       "hydro_water_temperature": { "name": "Temperatura wody{station_suffix}" },
-      "hydro_ice_phenomenon": { "name": "Zjawisko lodowe{station_suffix}" },
-      "hydro_overgrowth": { "name": "Zjawisko zarastania{station_suffix}" },
       "hydro_water_level_state": {
         "name": "Stan wody{station_suffix}",
         "state": {
@@ -126,7 +127,14 @@
           "medium": "Średni",
           "high": "Wysoki",
           "warning": "Ostrzegawczy",
-          "alarm": "Alarmowy"
+          "alarm": "Alarmowy",
+          "below": "Poniżej niskiego",
+          "unknown": "Nieznany",
+          "lowOutdated": "Niski (nieaktualny)",
+          "mediumOutdated": "Średni (nieaktualny)",
+          "highOutdated": "Wysoki (nieaktualny)",
+          "no-char-states": "Brak danych",
+          "no-water-state-data": "Brak danych"
         }
       },
       "hydro_water_level_trend": {

@@ -40,6 +40,7 @@ from .const import (
     FORECAST_API_URL,
     FORECAST_UPDATE_INTERVAL,
     HYDRO_TREND_MAP,
+    RADAR_UPDATE_INTERVAL,
     SYNOP_STATIONS,
     VOIVODESHIP_CAPITALS,
     VOIVODESHIPS,
@@ -64,10 +65,28 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._semaphore = asyncio.Semaphore(2)
         self._fetch_lock = asyncio.Lock()
         self._last_fetch_time: float = 0
+        self.synop_coords: dict[str, tuple[float, float]] = {}
+        self._synop_coords_loaded = False
+
+    async def get_synop_station_coords(self) -> dict[str, tuple[float, float]]:
+        """Return synop station coordinates — fetched from API, fallback to hardcoded."""
+        if not self._synop_coords_loaded:
+            live = await self.api.get_synop_station_coords()
+            if live:
+                self.synop_coords = live
+                _LOGGER.debug("Loaded %d synop coords from API", len(live))
+            else:
+                self.synop_coords = dict(SYNOP_STATIONS)
+                _LOGGER.debug("Using %d hardcoded synop coords (API unavailable)", len(SYNOP_STATIONS))
+            self._synop_coords_loaded = True
+        return self.synop_coords
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch all data from IMGW API without blocking the loop."""
         _LOGGER.debug("Fetching all IMGW-PIB data with rate limiting")
+
+        # Load synop station coordinates once
+        await self.get_synop_station_coords()
 
         async def _fetch_with_limit(coro, endpoint_name: str, default=None):
             if default is None:
@@ -206,7 +225,7 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if str(item.get("id_stacji")) == str(sid):
                     parsed = self._parse_synop(item)
                     # Coordinates for distance calculation
-                    s_coords = SYNOP_STATIONS.get(str(sid))
+                    s_coords = self.global_coordinator.synop_coords.get(str(sid))
                     s_lat = parsed.get("latitude") or (s_coords[0] if s_coords else None)
                     s_lon = parsed.get("longitude") or (s_coords[1] if s_coords else None)
                     if ha_lat and ha_lon and s_lat and s_lon:
@@ -226,24 +245,37 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     result[DATA_TYPE_HYDRO][sid] = parsed
                     break
 
-        # 2b. Enrich hydro with discharge and water temperature from per-station endpoints
-        for sid, parsed in result[DATA_TYPE_HYDRO].items():
-            discharge = await self.global_coordinator.api.get_hydro_discharge(str(sid))
-            if discharge:
-                parsed["flow"] = self._safe_float(discharge.get("value"))
-                parsed["flow_date"] = discharge.get("date")
+        # 2b. Enrich hydro with discharge and water temperature (parallel per station)
+        if result[DATA_TYPE_HYDRO]:
+            api = self.global_coordinator.api
+            sids = list(result[DATA_TYPE_HYDRO].keys())
 
-            water_temp = await self.global_coordinator.api.get_hydro_water_temperature(str(sid))
-            if water_temp:
-                parsed["water_temperature"] = self._safe_float(water_temp.get("value"))
-                parsed["water_temperature_date"] = water_temp.get("date")
+            async def _enrich_hydro(sid: str) -> tuple[str, dict | None, dict | None]:
+                discharge = await api.get_hydro_discharge(str(sid))
+                water_temp = await api.get_hydro_water_temperature(str(sid))
+                return sid, discharge, water_temp
 
-            _LOGGER.debug(
-                "Hydro-back: station %s — state=%s, trend=%s, flow=%s, water_temp=%s",
-                sid, parsed.get("water_level_state"), parsed.get("water_level_trend"),
-                parsed.get("flow"), parsed.get("water_temperature"),
+            enrichments = await asyncio.gather(
+                *[_enrich_hydro(sid) for sid in sids],
+                return_exceptions=True,
             )
-            await asyncio.sleep(0.1)
+            for item in enrichments:
+                if isinstance(item, BaseException):
+                    _LOGGER.debug("Hydro enrichment error: %s", item)
+                    continue
+                sid, discharge, water_temp = item
+                parsed = result[DATA_TYPE_HYDRO][sid]
+                if discharge:
+                    parsed["flow"] = self._safe_float(discharge.get("value"))
+                    parsed["flow_date"] = discharge.get("date")
+                if water_temp:
+                    parsed["water_temperature"] = self._safe_float(water_temp.get("value"))
+                    parsed["water_temperature_date"] = water_temp.get("date")
+                _LOGGER.debug(
+                    "Hydro-back: station %s — state=%s, flow=%s, water_temp=%s",
+                    sid, parsed.get("water_level_state"),
+                    parsed.get("flow"), parsed.get("water_temperature"),
+                )
 
         # 3. Meteo
         for sid in self.config_data.get(CONF_SELECTED_METEO, []):
@@ -319,12 +351,12 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         def find_nearest_synop(stations):
-            # Use hardcoded coordinates from SYNOP_STATIONS to find the nearest station
-            # (API does not provide coordinates for SYNOP stations)
+            # Use coordinates from global coordinator (fetched from API, fallback to hardcoded)
             nearest, d_min = None, DEFAULT_MAX_DISTANCE
+            synop_coords = self.global_coordinator.synop_coords
             for s in stations:
                 sid = str(s.get("id_stacji"))
-                coords = SYNOP_STATIONS.get(sid)
+                coords = synop_coords.get(sid)
                 if not coords:
                     continue
                 d = haversine(lat, lon, coords[0], coords[1])
@@ -429,7 +461,7 @@ class ImgwDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "voivodeship": data.get("province"),
             "longitude": self._safe_float(data.get("longitude")),
             "latitude": self._safe_float(data.get("latitude")),
-            "water_level": self._safe_int(current_state.get("value")),
+            "water_level": round(self._safe_float(current_state.get("value"))) if current_state.get("value") is not None else None,
             "water_level_date": current_state.get("date"),
             "water_level_state": data.get("statusCode"),
             "water_level_trend": water_level_trend,
@@ -700,4 +732,43 @@ class ImgwForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except aiohttp.ClientError as err:
             raise UpdateFailed(
                 f"Error communicating with IMGW forecast API: {err}"
+            ) from err
+
+
+class ImgwRadarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Fetch radar map image from IMGW API Proxy."""
+
+    def __init__(self, hass: HomeAssistant, lat: float, lon: float, product: str = "cmax", update_interval_seconds: int | None = None) -> None:
+        """Initialize the radar coordinator."""
+        interval = update_interval_seconds or RADAR_UPDATE_INTERVAL
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_radar_{product}",
+            update_interval=timedelta(seconds=interval),
+        )
+        self.lat = lat
+        self.lon = lon
+        self.product = product
+        self.image_bytes: bytes | None = None
+        self.image_timestamp: str | None = None
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch radar map from IMGW API Proxy."""
+        url = f"{FORECAST_API_URL}/radar?lat={self.lat}&lon={self.lon}&product={self.product}"
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status != 200:
+                    raise UpdateFailed(
+                        f"IMGW radar API returned {resp.status}"
+                    )
+                self.image_bytes = await resp.read()
+                self.image_timestamp = resp.headers.get("X-Radar-Timestamp")
+                return {"timestamp": self.image_timestamp}
+        except aiohttp.ClientError as err:
+            raise UpdateFailed(
+                f"Error fetching IMGW radar map: {err}"
             ) from err

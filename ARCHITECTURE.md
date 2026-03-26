@@ -66,12 +66,13 @@ custom_components/imgw_pib_monitor/
 ├── __init__.py              # Entry point, setup/unload, migracja wersji
 ├── manifest.json            # Metadata integracji
 ├── const.py                 # Stałe, endpointy, kody województw, współrzędne SYNOP, mapowanie ikon
-├── api.py                   # HTTP client dla IMGW-PIB API (+ hydro-back session)
-├── coordinator.py           # Global + Instance + Forecast coordinators
+├── api.py                   # HTTP client dla IMGW-PIB API (+ hydro-back + proxy)
+├── coordinator.py           # Global + Instance + Forecast + Radar coordinators
 ├── config_flow.py           # Config Flow (auto/manual) + Options Flow
 ├── sensor.py                # Definicje ~50 sensorów
 ├── binary_sensor.py         # 38 sensorów binarnych (ostrzeżenia rozszerzone)
 ├── weather.py               # Encja pogodowa z prognozą dzienną i godzinową
+├── camera.py                # Encje kamer radarowych i satelitarnych
 ├── utils.py                 # Geocoding, Haversine
 ├── strings.json             # Stringi bazowe (wymagane przez HA)
 └── translations/
@@ -336,6 +337,40 @@ BinarySensorEntity (Home Assistant)
 #### Tworzenie encji
 - Encje tworzone zawsze, nawet gdy API chwilowo niedostępne
 - Stan `off` gdy brak danych (nie `unavailable`)
+
+### 4c. Kamery radarowe i satelitarne (`camera.py`)
+
+Platforma `camera` dla map radarowych i satelitarnych z IMGW API Proxy:
+
+#### Hierarchia klas
+```
+Camera (Home Assistant)
+    └── CoordinatorEntity[ImgwRadarCoordinator]
+        └── ImgwRadarCamera
+            └── implements:
+                - async_camera_image (PNG z proxy)
+                - extra_state_attributes (lat/lon, produkt, timestamp)
+                - device_info (urządzenie radarowe)
+```
+
+#### Produkty radarowe
+| Produkt | Interwał | Opis |
+|---------|----------|------|
+| `cmax` | 5 min | Odbiciowość radarowa (dBZ) |
+| `sri` | 5 min | Intensywność opadu (mm/h) |
+| `pac` | 5 min | Suma opadu 1h (mm) |
+| `natural_color` | 15 min | Zdjęcie satelitarne |
+
+#### Koordynator (`ImgwRadarCoordinator`)
+- Osobny per produkt (np. CMAX i SRI = 2 koordynatory)
+- Pobiera gotowy PNG 800×800 z `imgw-api-proxy.evtlab.pl/radar`
+- Proxy komponuje: podkład OSM + dane IMGW + marker + legenda + timestamp
+- Odporny na awarie — błąd jednego produktu nie blokuje innych
+
+#### Tworzenie encji
+- Tworzone na podstawie wyboru użytkownika (dropdown w config flow)
+- Opcje: pojedynczy produkt, wszystkie radar, wszystkie + satelita
+- Przy zmianie opcji — nadmiarowe encje automatycznie usuwane z rejestru
 
 ### 5. Wyszukiwanie lokalizacji (`utils.py` i `config_flow.py`)
 
@@ -634,13 +669,13 @@ for k, v in raw_attrs.items():
 - **Python**: 3.12+
 - **Dependencies**: aiohttp (wbudowane w HA), voluptuous (wbudowane w HA)
 - **API**: Brak wymagań autentykacji
-- **Platformy**: `sensor`, `binary_sensor`, `weather` (opcjonalna)
-- **Wersja konfiguracji**: 10 (z automatyczną migracją starszych wersji 1-9)
+- **Platformy**: `sensor`, `binary_sensor`, `weather` (opcjonalna), `camera` (opcjonalna)
+- **Wersja konfiguracji**: 11 (z automatyczną migracją starszych wersji 1-10)
 - **Network**: Dostęp do:
   - `danepubliczne.imgw.pl` (dane synoptyczne, meteo i ostrzeżenia)
   - `hydro-back.imgw.pl` (dane hydrologiczne — stan wody, przepływ, temperatura, progi alarmowe, trend)
   - `meteo.imgw.pl` (ostrzeżenia rozszerzone — warunkowo)
-  - `imgw-api-proxy.evtlab.pl` (wyszukiwanie lokalizacji, kody TERYT, prognoza pogody)
+  - `imgw-api-proxy.evtlab.pl` (wyszukiwanie lokalizacji, kody TERYT, prognoza pogody, mapy radarowe, koordynaty stacji)
   - `nominatim.openstreetmap.org` (reverse geocoding w trybie auto-discovery)
 
 ## Limity i ograniczenia

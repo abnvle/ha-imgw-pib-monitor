@@ -95,6 +95,7 @@ class TestStepAuto:
             api.get_all_synop_data = AsyncMock(return_value=SAMPLE_SYNOP_DATA)
             api.get_all_hydro_data = AsyncMock(return_value=SAMPLE_HYDRO_DATA)
             api.get_all_meteo_data = AsyncMock(return_value=SAMPLE_METEO_DATA)
+            api.get_synop_station_coords = AsyncMock(return_value={})
 
             with patch(
                 "custom_components.imgw_pib_monitor.config_flow.async_get_clientsession"

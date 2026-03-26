@@ -76,16 +76,16 @@ def _build_enhanced_binary_sensors() -> tuple[ImgwBinarySensorEntityDescription,
                     device_class=BinarySensorDeviceClass.SAFETY,
                     icon=f"mdi:numeric-{level}-box",
                     is_on_fn=lambda data, _l=level, _m=mode: any(
-                        w["level"] >= _l
-                        and (w["is_active"] if _m == "active" else True)
-                        for w in data.get("warnings", [])
+                        w.get("level", 0) >= _l
+                        and (w.get("is_active", False) if _m == "active" else True)
+                        for w in (data.get("warnings") or [])
                     ),
                     extra_attrs_fn=lambda data, _l=level, _m=mode: {
                         "warnings_count": sum(
                             1
-                            for w in data.get("warnings", [])
-                            if w["level"] >= _l
-                            and (w["is_active"] if _m == "active" else True)
+                            for w in (data.get("warnings") or [])
+                            if w.get("level", 0) >= _l
+                            and (w.get("is_active", False) if _m == "active" else True)
                         )
                     },
                 )

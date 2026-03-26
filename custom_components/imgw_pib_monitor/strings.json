@@ -19,7 +19,8 @@
           "enable_warnings_hydro": "Enable hydrological warnings",
           "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filter warnings for my county only",
-          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)",
+          "radar_type": "Radar map"
         }
       },
       "manual_start": {
@@ -47,7 +48,8 @@
           "enable_warnings_hydro": "Enable hydrological warnings",
           "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filter warnings for my county only",
-          "enable_weather_forecast": "Enable weather forecast (daily & hourly)"
+          "enable_weather_forecast": "Enable weather forecast (daily & hourly)",
+          "radar_type": "Radar map"
         }
       },
       "select": {
@@ -91,7 +93,8 @@
           "update_interval": "Update interval (minutes)",
           "use_powiat_for_warnings": "Filter warnings for my county only",
           "enable_weather_forecast": "Enable weather forecast (daily & hourly)",
-          "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)"
+          "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)",
+          "radar_type": "Radar map"
         }
       }
     }
@@ -117,8 +120,6 @@
       "hydro_water_level": { "name": "Water level{station_suffix}" },
       "hydro_flow": { "name": "Water flow{station_suffix}" },
       "hydro_water_temperature": { "name": "Water temperature{station_suffix}" },
-      "hydro_ice_phenomenon": { "name": "Ice phenomenon{station_suffix}" },
-      "hydro_overgrowth": { "name": "Overgrowth phenomenon{station_suffix}" },
       "hydro_water_level_state": {
         "name": "Water level state{station_suffix}",
         "state": {
@@ -126,7 +127,14 @@
           "medium": "Medium",
           "high": "High",
           "warning": "Warning",
-          "alarm": "Alarm"
+          "alarm": "Alarm",
+          "below": "Below low",
+          "unknown": "Unknown",
+          "lowOutdated": "Low (outdated)",
+          "mediumOutdated": "Medium (outdated)",
+          "highOutdated": "High (outdated)",
+          "no-char-states": "No data",
+          "no-water-state-data": "No data"
         }
       },
       "hydro_water_level_trend": {

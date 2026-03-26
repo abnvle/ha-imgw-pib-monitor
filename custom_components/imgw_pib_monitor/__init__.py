@@ -13,7 +13,13 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import ImgwApiClient
 from .const import (
     CONF_ENABLE_ENHANCED_WARNINGS_METEO,
+    CONF_ENABLE_RADAR_CAMERA,
     CONF_ENABLE_WEATHER_FORECAST,
+    CONF_RADAR_TYPE,
+    RADAR_TYPE_NONE,
+    RADAR_SAT_UPDATE_INTERVAL,
+    RADAR_TYPE_SAT,
+    RADAR_UPDATE_INTERVAL,
     CONF_FORECAST_LAT,
     CONF_FORECAST_LON,
     CONF_LOCATION_NAME,
@@ -30,6 +36,7 @@ from .coordinator import (
     ImgwDataUpdateCoordinator,
     ImgwForecastCoordinator,
     ImgwGlobalDataCoordinator,
+    ImgwRadarCoordinator,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -75,6 +82,26 @@ def _async_cleanup_enhanced_warnings(hass: HomeAssistant, entry: ConfigEntry) ->
                 dev_reg.async_remove_device(device.id)
                 _LOGGER.debug("Removed enhanced warning device: %s", device.name)
                 return
+
+
+def _async_cleanup_radar(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove radar camera entities and device from registries when radar is disabled."""
+    ent_reg = er.async_get(hass)
+    for product in ("cmax", "sri", "pac", "natural_color"):
+        entity_id = ent_reg.async_get_entity_id(
+            "camera", DOMAIN, f"{DOMAIN}_radar_{product}_{entry.entry_id}"
+        )
+        if entity_id:
+            ent_reg.async_remove(entity_id)
+            _LOGGER.debug("Removed radar camera entity: %s", entity_id)
+
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_device(
+        identifiers={(DOMAIN, f"radar_{entry.entry_id}")}
+    )
+    if device:
+        dev_reg.async_remove_device(device.id)
+        _LOGGER.debug("Removed radar device: %s", device.name)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -128,16 +155,56 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Forecast support (weather platform)
     if entry.data.get(CONF_ENABLE_WEATHER_FORECAST):
-        lat = entry.data.get(CONF_FORECAST_LAT, hass.config.latitude)
-        lon = entry.data.get(CONF_FORECAST_LON, hass.config.longitude)
+        try:
+            lat = entry.data.get(CONF_FORECAST_LAT, hass.config.latitude)
+            lon = entry.data.get(CONF_FORECAST_LON, hass.config.longitude)
 
-        forecast_coordinator = ImgwForecastCoordinator(hass, lat, lon, update_interval)
-        await forecast_coordinator.async_config_entry_first_refresh()
-        hass.data[DOMAIN][f"{entry.entry_id}_forecast"] = forecast_coordinator
-        platforms.append("weather")
+            forecast_coordinator = ImgwForecastCoordinator(hass, lat, lon, update_interval)
+            await forecast_coordinator.async_config_entry_first_refresh()
+            hass.data[DOMAIN][f"{entry.entry_id}_forecast"] = forecast_coordinator
+            platforms.append("weather")
+        except Exception as err:
+            _LOGGER.warning("Forecast unavailable at startup, skipping: %s", err)
     else:
         # Forecast disabled — clean up leftover entity/device from registry
         _async_cleanup_forecast(hass, entry)
+
+    # Radar camera support (camera platform)
+    radar_type = entry.data.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
+    if entry.data.get(CONF_ENABLE_RADAR_CAMERA) and radar_type != RADAR_TYPE_NONE:
+        from .camera import ALL_PRODUCTS, get_selected_products
+
+        lat = entry.data.get(CONF_FORECAST_LAT, hass.config.latitude)
+        lon = entry.data.get(CONF_FORECAST_LON, hass.config.longitude)
+        products = get_selected_products(radar_type)
+
+        loaded_products = []
+        for product in products:
+            try:
+                interval = RADAR_SAT_UPDATE_INTERVAL if product == RADAR_TYPE_SAT else RADAR_UPDATE_INTERVAL
+                coordinator = ImgwRadarCoordinator(hass, lat, lon, product, interval)
+                await coordinator.async_config_entry_first_refresh()
+                hass.data[DOMAIN][f"{entry.entry_id}_radar_{product}"] = coordinator
+                loaded_products.append(product)
+            except Exception as err:
+                _LOGGER.warning("Radar %s unavailable at startup, skipping: %s", product, err)
+
+        # Clean up products that are no longer selected
+        ent_reg = er.async_get(hass)
+        for product in ALL_PRODUCTS:
+            if product not in products:
+                entity_id = ent_reg.async_get_entity_id(
+                    "camera", DOMAIN, f"{DOMAIN}_radar_{product}_{entry.entry_id}"
+                )
+                if entity_id:
+                    ent_reg.async_remove(entity_id)
+                    _LOGGER.debug("Removed unused radar entity: %s", entity_id)
+
+        if loaded_products:
+            hass.data[DOMAIN][f"{entry.entry_id}_radar"] = True
+            platforms.append("camera")
+    else:
+        _async_cleanup_radar(hass, entry)
 
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
 
@@ -209,6 +276,18 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         hass.config_entries.async_update_entry(
             config_entry, data=new_data, version=10
         )
+    if config_entry.version < 11:
+        _LOGGER.debug(
+            "Migrating config entry %s from version %s to 11",
+            config_entry.entry_id,
+            config_entry.version,
+        )
+        new_data = {**config_entry.data}
+        new_data.setdefault(CONF_ENABLE_RADAR_CAMERA, False)
+        new_data.setdefault(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
+        hass.config_entries.async_update_entry(
+            config_entry, data=new_data, version=11
+        )
     return True
 
 
@@ -226,12 +305,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         platforms.append("binary_sensor")
     if f"{entry.entry_id}_forecast" in hass.data.get(DOMAIN, {}):
         platforms.append("weather")
+    if f"{entry.entry_id}_radar" in hass.data.get(DOMAIN, {}):
+        platforms.append("camera")
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_forecast", None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_binary_sensor", None)
+        hass.data[DOMAIN].pop(f"{entry.entry_id}_radar", None)
+        for p in ("cmax", "sri", "pac", "natural_color"):
+            hass.data[DOMAIN].pop(f"{entry.entry_id}_radar_{p}", None)
 
         # Recalculate global coordinator interval based on remaining entries
         global_coord = hass.data[DOMAIN].get("global_coordinator")

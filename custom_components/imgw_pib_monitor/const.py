@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "imgw_pib_monitor"
+VERSION: Final = "2.2.0"
+USER_AGENT: Final = f"HomeAssistant-IMGW-PIB-Monitor/{VERSION}"
 MANUFACTURER: Final = "Łukasz Kozik (lkozik@evilit.pl)"
 ATTRIBUTION: Final = (
     "Źródłem pochodzenia danych jest Instytut Meteorologii "
@@ -14,7 +16,6 @@ ATTRIBUTION: Final = (
 # API Base URL and Endpoints
 API_BASE_URL: Final = "https://danepubliczne.imgw.pl/api/data"
 API_ENDPOINT_SYNOP: Final = f"{API_BASE_URL}/synop"
-API_ENDPOINT_HYDRO: Final = f"{API_BASE_URL}/hydro"
 API_ENDPOINT_METEO: Final = f"{API_BASE_URL}/meteo"
 API_ENDPOINT_WARNINGS_METEO: Final = f"{API_BASE_URL}/warningsmeteo"
 API_ENDPOINT_WARNINGS_HYDRO: Final = f"{API_BASE_URL}/warningshydro"
@@ -40,7 +41,6 @@ HYDRO_TREND_MAP: Final[dict[int, str]] = {
 # Config keys
 CONF_STATION_ID: Final = "station_id"
 CONF_STATION_NAME: Final = "station_name"
-CONF_DATA_TYPE: Final = "data_type"
 CONF_UPDATE_INTERVAL: Final = "update_interval"
 CONF_VOIVODESHIP: Final = "voivodeship"
 CONF_POWIAT: Final = "powiat"
@@ -80,7 +80,6 @@ DATA_TYPES: Final = {
 
 # Default update intervals (minutes)
 DEFAULT_UPDATE_INTERVAL: Final = 30
-DEFAULT_UPDATE_INTERVAL_WARNINGS: Final = 15
 MIN_UPDATE_INTERVAL: Final = 5
 MAX_UPDATE_INTERVAL: Final = 120
 DEFAULT_MAX_DISTANCE: Final = 50.0  # km for auto-detection
@@ -191,6 +190,19 @@ SYNOP_STATIONS: Final[dict[str, tuple[float, float]]] = {
     "12690": (49.47, 22.33),  # Lesko
     "12695": (49.78, 22.77),  # Przemyśl
 }
+
+# Radar camera config
+CONF_ENABLE_RADAR_CAMERA: Final = "enable_radar_camera"
+CONF_RADAR_TYPE: Final = "radar_type"
+RADAR_TYPE_NONE: Final = "none"
+RADAR_TYPE_CMAX: Final = "cmax"
+RADAR_TYPE_SRI: Final = "sri"
+RADAR_TYPE_PAC: Final = "pac"
+RADAR_TYPE_SAT: Final = "natural_color"
+RADAR_TYPE_ALL_RADAR: Final = "all_radar"
+RADAR_TYPE_ALL: Final = "all"
+RADAR_UPDATE_INTERVAL: Final = 300  # 5 minutes, in seconds
+RADAR_SAT_UPDATE_INTERVAL: Final = 900  # 15 minutes for satellite
 
 # Forecast (weather entity) config
 CONF_ENABLE_WEATHER_FORECAST: Final = "enable_weather_forecast"

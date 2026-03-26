@@ -30,7 +30,16 @@ from .api import ImgwApiClient, ImgwApiError
 from .const import (
     CONF_AUTO_DETECT,
     CONF_ENABLE_ENHANCED_WARNINGS_METEO,
+    CONF_ENABLE_RADAR_CAMERA,
     CONF_ENABLE_WARNINGS_HYDRO,
+    CONF_RADAR_TYPE,
+    RADAR_TYPE_ALL,
+    RADAR_TYPE_ALL_RADAR,
+    RADAR_TYPE_CMAX,
+    RADAR_TYPE_NONE,
+    RADAR_TYPE_PAC,
+    RADAR_TYPE_SAT,
+    RADAR_TYPE_SRI,
     CONF_ENABLE_WARNINGS_METEO,
     CONF_ENABLE_WEATHER_FORECAST,
     CONF_FORECAST_LAT,
@@ -62,15 +71,34 @@ from .utils import geocode_location, haversine, nominatim_reverse_geocode, rever
 
 _LOGGER = logging.getLogger(__name__)
 
+RADAR_TYPE_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[
+            SelectOptionDict(value=RADAR_TYPE_NONE, label="Wyłączona"),
+            SelectOptionDict(value=RADAR_TYPE_CMAX, label="Odbiciowość (CMAX)"),
+            SelectOptionDict(value=RADAR_TYPE_SRI, label="Opady (SRI)"),
+            SelectOptionDict(value=RADAR_TYPE_PAC, label="Suma opadów 1h (PAC)"),
+            SelectOptionDict(value=RADAR_TYPE_SAT, label="Zdjęcie satelitarne"),
+            SelectOptionDict(value=RADAR_TYPE_ALL_RADAR, label="Wszystkie mapy radarowe"),
+            SelectOptionDict(value=RADAR_TYPE_ALL, label="Wszystkie mapy + satelita"),
+        ],
+        mode=SelectSelectorMode.DROPDOWN,
+    )
+)
+
 
 def _find_nearest_synop(
-    stations: list[dict[str, Any]], lat: float, lon: float
+    stations: list[dict[str, Any]],
+    lat: float,
+    lon: float,
+    synop_coords: dict[str, tuple[float, float]] | None = None,
 ) -> str | None:
-    """Find nearest SYNOP station using hardcoded coordinates."""
+    """Find nearest SYNOP station using coordinates from API or hardcoded fallback."""
+    coords_map = synop_coords or SYNOP_STATIONS
     nearest, dist_min = None, DEFAULT_MAX_DISTANCE
     for s in stations:
         sid = str(s.get("id_stacji"))
-        coords = SYNOP_STATIONS.get(sid)
+        coords = coords_map.get(sid)
         if not coords:
             continue
         d = haversine(lat, lon, coords[0], coords[1])
@@ -106,7 +134,7 @@ def _find_nearest_station(
 class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a minimalist and smart config flow for IMGW-PIB Monitor."""
 
-    VERSION = 10
+    VERSION = 11
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -172,11 +200,13 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 api.get_all_synop_data(),
                 api.get_all_hydro_data(),
                 api.get_all_meteo_data(),
+                api.get_synop_station_coords(),
                 return_exceptions=True,
             )
             synop_data = results[0] if not isinstance(results[0], BaseException) else []
             hydro_data = results[1] if not isinstance(results[1], BaseException) else []
             meteo_data = results[2] if not isinstance(results[2], BaseException) else []
+            synop_coords = results[3] if not isinstance(results[3], BaseException) else {}
 
             if not synop_data and not hydro_data and not meteo_data:
                 _LOGGER.warning(
@@ -188,7 +218,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="cannot_connect")
 
             # Find nearest for each type independently
-            self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
+            self._nearest_synop = _find_nearest_synop(synop_data, lat, lon, synop_coords or None)
             self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "latitude", "longitude", "code")
             self._nearest_meteo = _find_nearest_station(meteo_data, lat, lon, "lat", "lon", "kod_stacji")
             self._location_coords = (lat, lon)
@@ -303,6 +333,12 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 final_config[CONF_FORECAST_LAT] = self.hass.config.latitude
                 final_config[CONF_FORECAST_LON] = self.hass.config.longitude
 
+            # Radar camera
+            radar_type = user_input.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
+            if radar_type != RADAR_TYPE_NONE:
+                final_config[CONF_ENABLE_RADAR_CAMERA] = True
+                final_config[CONF_RADAR_TYPE] = radar_type
+
             # Location name
             loc_name = self._detected_location_name or "IMGW Auto-Discovery"
             final_config[CONF_LOCATION_NAME] = loc_name
@@ -330,8 +366,9 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
         if self._detected_powiat_code and self._detected_powiat_name:
             schema[vol.Optional(CONF_USE_POWIAT_FOR_WARNINGS, default=False)] = BooleanSelector()
 
-        # Weather forecast
+        # Weather forecast & radar camera
         schema[vol.Optional(CONF_ENABLE_WEATHER_FORECAST, default=False)] = BooleanSelector()
+        schema[vol.Optional(CONF_RADAR_TYPE, default=RADAR_TYPE_NONE)] = RADAR_TYPE_SELECTOR
 
         return self.async_show_form(step_id="auto_options", data_schema=vol.Schema(schema))
 
@@ -361,7 +398,15 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             # User selected a location
-            selected_index = int(user_input["location_choice"])
+            try:
+                selected_index = int(user_input["location_choice"])
+            except (ValueError, TypeError):
+                errors["base"] = "invalid_selection"
+                return self.async_show_form(
+                    step_id="manual_select_location",
+                    data_schema=vol.Schema({}),
+                    errors=errors,
+                )
             if 0 <= selected_index < len(self._location_results):
                 lat, lon, location_details, display_name = self._location_results[selected_index]
                 self._location_coords = (lat, lon)
@@ -517,11 +562,13 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 api.get_all_synop_data(),
                 api.get_all_hydro_data(),
                 api.get_all_meteo_data(),
+                api.get_synop_station_coords(),
                 return_exceptions=True,
             )
             synop_data = results[0] if not isinstance(results[0], BaseException) else []
             hydro_data = results[1] if not isinstance(results[1], BaseException) else []
             meteo_data = results[2] if not isinstance(results[2], BaseException) else []
+            synop_coords = results[3] if not isinstance(results[3], BaseException) else {}
 
             if not synop_data and not hydro_data and not meteo_data:
                 errors["base"] = "cannot_connect"
@@ -536,7 +583,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
             # Find nearest for each type independently
-            self._nearest_synop = _find_nearest_synop(synop_data, lat, lon)
+            self._nearest_synop = _find_nearest_synop(synop_data, lat, lon, synop_coords or None)
             self._nearest_hydro = _find_nearest_station(hydro_data, lat, lon, "latitude", "longitude", "code")
             self._nearest_meteo = _find_nearest_station(meteo_data, lat, lon, "lat", "lon", "kod_stacji")
 
@@ -671,6 +718,12 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 final_config[CONF_FORECAST_LAT] = lat
                 final_config[CONF_FORECAST_LON] = lon
 
+            # Radar camera
+            radar_type = user_input.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
+            if radar_type != RADAR_TYPE_NONE:
+                final_config[CONF_ENABLE_RADAR_CAMERA] = True
+                final_config[CONF_RADAR_TYPE] = radar_type
+
             # Location name
             location_name = self._detected_location_name or self._data.get("location_name", "Manual Setup")
             final_config[CONF_LOCATION_NAME] = location_name
@@ -698,8 +751,9 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
         if self._detected_powiat_code and self._detected_powiat_name:
             schema[vol.Optional(CONF_USE_POWIAT_FOR_WARNINGS, default=False)] = BooleanSelector()
 
-        # Weather forecast
+        # Weather forecast & radar camera
         schema[vol.Optional(CONF_ENABLE_WEATHER_FORECAST, default=False)] = BooleanSelector()
+        schema[vol.Optional(CONF_RADAR_TYPE, default=RADAR_TYPE_NONE)] = RADAR_TYPE_SELECTOR
 
         return self.async_show_form(step_id="manual_options", data_schema=vol.Schema(schema))
 
@@ -786,6 +840,11 @@ class ImgwPibMonitorOptionsFlow(OptionsFlow):
                 new_data[CONF_FORECAST_LAT] = self.hass.config.latitude
                 new_data[CONF_FORECAST_LON] = self.hass.config.longitude
 
+            # Handle radar camera
+            radar_type = user_input.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
+            new_data[CONF_ENABLE_RADAR_CAMERA] = radar_type != RADAR_TYPE_NONE
+            new_data[CONF_RADAR_TYPE] = radar_type
+
             # Handle enhanced warnings toggle
             enable_enhanced = user_input.get(CONF_ENABLE_ENHANCED_WARNINGS_METEO, False)
             new_data[CONF_ENABLE_ENHANCED_WARNINGS_METEO] = enable_enhanced
@@ -845,6 +904,12 @@ class ImgwPibMonitorOptionsFlow(OptionsFlow):
             CONF_ENABLE_ENHANCED_WARNINGS_METEO,
             default=current_enhanced,
         )] = BooleanSelector()
+
+        current_radar_type = self._config_entry.data.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
+        schema[vol.Optional(
+            CONF_RADAR_TYPE,
+            default=current_radar_type,
+        )] = RADAR_TYPE_SELECTOR
 
         return self.async_show_form(
             step_id="init",

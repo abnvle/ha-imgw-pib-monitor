@@ -7,6 +7,8 @@ from typing import Any
 
 import aiohttp
 
+from .const import USER_AGENT
+
 
 async def nominatim_reverse_geocode(
     session: aiohttp.ClientSession,
@@ -26,7 +28,7 @@ async def nominatim_reverse_geocode(
         "accept-language": "pl",
         "zoom": "10",
     }
-    headers = {"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.1.0"}
+    headers = {"User-Agent": USER_AGENT}
 
     try:
         async with session.get(
@@ -79,7 +81,7 @@ async def reverse_geocode(
         return None
 
     url = "https://imgw-api-proxy.evtlab.pl/search"
-    headers = {"User-Agent": "HomeAssistant-IMGW-PIB-Monitor/2.1.0"}
+    headers = {"User-Agent": USER_AGENT}
 
     best_location = None
     best_distance = float("inf")
@@ -160,7 +162,7 @@ async def geocode_location(
         "name": location_name,
     }
     headers = {
-        "User-Agent": "HomeAssistant-IMGW-PIB-Monitor/1.1.0",
+        "User-Agent": USER_AGENT,
     }
 
     try:

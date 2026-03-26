@@ -7,6 +7,7 @@
 [![HACS Validation](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/hacs-validation.yml?label=HACS%20Validation&logo=github&style=popout)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/hacs-validation.yml)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/hassfest.yml?label=Hassfest&logo=github&style=popout)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/hassfest.yml)
 [![Tests](https://img.shields.io/github/actions/workflow/status/abnvle/ha-imgw-pib-monitor/tests.yml?label=Tests&logo=github&style=popout)](https://github.com/abnvle/ha-imgw-pib-monitor/actions/workflows/tests.yml)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=popout&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/abnvle)
 
 *[English version](README_EN.md)*
 
@@ -21,8 +22,9 @@ Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Mete
 - **Dwa tryby konfiguracji** - automatyczny (GPS) lub manualny (wpisanie lokalizacji)
 - **Config Flow UI** - konfiguracja przez interfejs, zero YAML
 - **7 źródeł danych** - synoptyczne, hydrologiczne, meteorologiczne, ostrzeżenia meteo, ostrzeżenia hydro, ostrzeżenia rozszerzone (meteo.imgw.pl), dane rozszerzone hydro (hydro-back)
-- **Do 90 encji** - temperatura, wiatr, wilgotność, ciśnienie, stan wody, przepływ, trendy, alarmy, ostrzeżenia, binary sensory zjawisk i inne
+- **Do 90+ encji** - temperatura, wiatr, wilgotność, ciśnienie, stan wody, przepływ, trendy, alarmy, ostrzeżenia, binary sensory zjawisk, mapy radarowe i inne
 - **Encja pogodowa** - prognoza pogody (dzienna i godzinowa) z IMGW-PIB jako encja weather
+- **Mapy radarowe i satelitarne** - opcjonalne encje camera z mapą opadów, odbiciowości, sumy opadów i zdjęciem satelitarnym
 - **Wiele instancji** - możliwość dodania integracji wielokrotnie dla różnych lokalizacji
 - **Tłumaczenia PL/EN**
 - **Bez klucza API** - dane z publicznego API IMGW-PIB
@@ -40,6 +42,8 @@ Integracja Home Assistant wykorzystująca publiczne dane IMGW-PIB (Instytut Mete
 - **Prognoza pogody** - opcjonalna encja pogodowa z prognozą dzienną i godzinową (dane z IMGW API Proxy)
 - **Ostrzeżenia rozszerzone** - szczegółowe ostrzeżenia z meteo.imgw.pl z 16 typami zjawisk (burze, grad, mróz, upał itp.) jako binary sensory
 - **Wzbogacone dane hydro** - trend poziomu wody, odległość do poziomu alarmowego/ostrzegawczego, stan wody z hydro-back API
+- **Dynamiczne koordynaty stacji** - współrzędne stacji synoptycznych pobierane z API (fallback na dane lokalne)
+- **Odporność na awarie** - błędy map radarowych i prognozy nie blokują działania reszty integracji
 
 ## Zrzuty ekranu
 
@@ -257,6 +261,26 @@ Prognozy:
 - **Dzienna** - temperatura max/min, wiatr, opady (grupowanie dzień/noc)
 - **Godzinowa** - pełne dane pogodowe na każdą godzinę
 
+### Mapy radarowe i satelitarne (encje camera)
+
+Opcjonalne encje `camera.*` z mapami generowanymi przez IMGW API Proxy. Obraz 800×800 px z podkładem mapowym OSM, danymi IMGW i markerem lokalizacji. Odświeżanie co 5 minut (radar) lub 15 minut (satelita).
+
+| Mapa | Opis | Produkt |
+|---|---|---|
+| Odbiciowość (CMAX) | Maksymalna odbiciowość radarowa — pokazuje echo chmur i opadów | `cmax` |
+| Opady (SRI) | Intensywność opadu na ziemi w mm/h | `sri` |
+| Suma opadów 1h (PAC) | Skumulowany opad w ciągu ostatniej godziny w mm | `pac` |
+| Zdjęcie satelitarne | Obraz satelitarny w kolorach naturalnych z nałożonymi granicami | `natural_color` |
+
+Dostępne opcje w konfiguracji:
+- Pojedynczy produkt (dowolny z powyższych)
+- Wszystkie mapy radarowe (CMAX + SRI + PAC)
+- Wszystkie mapy + satelita (CMAX + SRI + PAC + zdjęcie satelitarne)
+
+Atrybuty każdej encji: współrzędne lokalizacji, typ produktu radarowego, timestamp obrazu.
+
+Każdy obraz radarowy zawiera skalę kolorów z wartościami (dBZ, mm/h, mm) oraz datę i godzinę pomiaru.
+
 ## Instalacja
 
 ### HACS (zalecane)
@@ -302,7 +326,8 @@ Prognozy:
 7. Zaznacz typy danych, które chcesz monitorować
 8. Dla ostrzeżeń możesz opcjonalnie włączyć filtrowanie po powiecie
 9. Opcjonalnie włącz prognozę pogody (encja weather)
-10. Potwierdź konfigurację
+10. Opcjonalnie wybierz mapę radarową/satelitarną (encja camera)
+11. Potwierdź konfigurację
 
 ### Wiele instancji
 
@@ -319,6 +344,7 @@ Po dodaniu integracji możesz zmienić ustawienia:
 5. Włącz lub wyłącz filtrowanie ostrzeżeń po powiecie
 6. Włącz lub wyłącz prognozę pogody (encja weather)
 7. Włącz lub wyłącz ostrzeżenia rozszerzone (meteo.imgw.pl)
+8. Wybierz mapę radarową/satelitarną (wyłączona, pojedynczy produkt lub wszystkie)
 
 Domyślny interwał aktualizacji: 30 minut. Globalny koordynator synchronizuje się z najkrótszym interwałem spośród wszystkich instancji.
 
@@ -557,8 +583,10 @@ Dane hydrologiczne (hydro-back API — to samo źródło co portal hydro.imgw.pl
 Dane rozszerzone:
 - `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` (ostrzeżenia rozszerzone)
 
-Prognoza pogody:
-- `https://imgw-api-proxy.evtlab.pl/forecast`
+IMGW API Proxy (prognoza, radar, koordynaty stacji):
+- `https://imgw-api-proxy.evtlab.pl/forecast` (prognoza pogody)
+- `https://imgw-api-proxy.evtlab.pl/radar?lat=...&lon=...&product=...` (mapy radarowe i satelitarne)
+- `https://imgw-api-proxy.evtlab.pl/stations/synop` (koordynaty stacji synoptycznych)
 
 > Źródłem pochodzenia danych pomiarowych jest Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy.
 
