@@ -18,7 +18,6 @@ from .const import (
     CONF_RADAR_TYPE,
     RADAR_TYPE_NONE,
     RADAR_SAT_UPDATE_INTERVAL,
-    RADAR_TYPE_SAT,
     RADAR_UPDATE_INTERVAL,
     CONF_FORECAST_LAT,
     CONF_FORECAST_LON,
@@ -87,7 +86,7 @@ def _async_cleanup_enhanced_warnings(hass: HomeAssistant, entry: ConfigEntry) ->
 def _async_cleanup_radar(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove radar camera entities and device from registries when radar is disabled."""
     ent_reg = er.async_get(hass)
-    for product in ("cmax", "sri", "pac", "natural_color"):
+    for product in ("cmax", "sri", "pac", "natural_color", "infrared", "water_vapor", "cloud_type"):
         entity_id = ent_reg.async_get_entity_id(
             "camera", DOMAIN, f"{DOMAIN}_radar_{product}_{entry.entry_id}"
         )
@@ -172,7 +171,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Radar camera support (camera platform)
     radar_type = entry.data.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
     if entry.data.get(CONF_ENABLE_RADAR_CAMERA) and radar_type != RADAR_TYPE_NONE:
-        from .camera import ALL_PRODUCTS, get_selected_products
+        from .camera import ALL_PRODUCTS, ALL_SAT_PRODUCTS, get_selected_products
 
         lat = entry.data.get(CONF_FORECAST_LAT, hass.config.latitude)
         lon = entry.data.get(CONF_FORECAST_LON, hass.config.longitude)
@@ -181,7 +180,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         loaded_products = []
         for product in products:
             try:
-                interval = RADAR_SAT_UPDATE_INTERVAL if product == RADAR_TYPE_SAT else RADAR_UPDATE_INTERVAL
+                interval = RADAR_SAT_UPDATE_INTERVAL if product in ALL_SAT_PRODUCTS else RADAR_UPDATE_INTERVAL
                 coordinator = ImgwRadarCoordinator(hass, lat, lon, product, interval)
                 await coordinator.async_config_entry_first_refresh()
                 hass.data[DOMAIN][f"{entry.entry_id}_radar_{product}"] = coordinator
@@ -314,7 +313,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(f"{entry.entry_id}_forecast", None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_binary_sensor", None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_radar", None)
-        for p in ("cmax", "sri", "pac", "natural_color"):
+        for p in ("cmax", "sri", "pac", "natural_color", "infrared", "water_vapor", "cloud_type"):
             hass.data[DOMAIN].pop(f"{entry.entry_id}_radar_{p}", None)
 
         # Recalculate global coordinator interval based on remaining entries

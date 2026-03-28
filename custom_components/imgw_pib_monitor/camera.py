@@ -21,10 +21,14 @@ from .const import (
     MANUFACTURER,
     RADAR_TYPE_ALL,
     RADAR_TYPE_ALL_RADAR,
+    RADAR_TYPE_ALL_SAT,
+    RADAR_TYPE_CLOUD_TYPE,
     RADAR_TYPE_CMAX,
+    RADAR_TYPE_INFRARED,
     RADAR_TYPE_PAC,
     RADAR_TYPE_SAT,
     RADAR_TYPE_SRI,
+    RADAR_TYPE_WATER_VAPOR,
 )
 from .coordinator import ImgwRadarCoordinator
 
@@ -33,10 +37,14 @@ PRODUCT_LABELS = {
     RADAR_TYPE_SRI: "Opady (SRI)",
     RADAR_TYPE_PAC: "Suma opadów 1h (PAC)",
     RADAR_TYPE_SAT: "Zdjęcie satelitarne",
+    RADAR_TYPE_INFRARED: "Zachmurzenie (IR)",
+    RADAR_TYPE_WATER_VAPOR: "Para wodna",
+    RADAR_TYPE_CLOUD_TYPE: "Typy chmur",
 }
 
 ALL_RADAR_PRODUCTS = [RADAR_TYPE_CMAX, RADAR_TYPE_SRI, RADAR_TYPE_PAC]
-ALL_PRODUCTS = [RADAR_TYPE_CMAX, RADAR_TYPE_SRI, RADAR_TYPE_PAC, RADAR_TYPE_SAT]
+ALL_SAT_PRODUCTS = [RADAR_TYPE_SAT, RADAR_TYPE_INFRARED, RADAR_TYPE_WATER_VAPOR, RADAR_TYPE_CLOUD_TYPE]
+ALL_PRODUCTS = ALL_RADAR_PRODUCTS + ALL_SAT_PRODUCTS
 
 
 def get_selected_products(radar_type: str) -> list[str]:
@@ -45,6 +53,8 @@ def get_selected_products(radar_type: str) -> list[str]:
         return list(ALL_PRODUCTS)
     if radar_type == RADAR_TYPE_ALL_RADAR:
         return list(ALL_RADAR_PRODUCTS)
+    if radar_type == RADAR_TYPE_ALL_SAT:
+        return list(ALL_SAT_PRODUCTS)
     if radar_type in PRODUCT_LABELS:
         return [radar_type]
     # Legacy "both" value from older config entries

@@ -35,11 +35,15 @@ from .const import (
     CONF_RADAR_TYPE,
     RADAR_TYPE_ALL,
     RADAR_TYPE_ALL_RADAR,
+    RADAR_TYPE_ALL_SAT,
+    RADAR_TYPE_CLOUD_TYPE,
     RADAR_TYPE_CMAX,
+    RADAR_TYPE_INFRARED,
     RADAR_TYPE_NONE,
     RADAR_TYPE_PAC,
     RADAR_TYPE_SAT,
     RADAR_TYPE_SRI,
+    RADAR_TYPE_WATER_VAPOR,
     CONF_ENABLE_WARNINGS_METEO,
     CONF_ENABLE_WEATHER_FORECAST,
     CONF_FORECAST_LAT,
@@ -75,12 +79,19 @@ RADAR_TYPE_SELECTOR = SelectSelector(
     SelectSelectorConfig(
         options=[
             SelectOptionDict(value=RADAR_TYPE_NONE, label="Wyłączona"),
-            SelectOptionDict(value=RADAR_TYPE_CMAX, label="Odbiciowość (CMAX)"),
-            SelectOptionDict(value=RADAR_TYPE_SRI, label="Opady (SRI)"),
-            SelectOptionDict(value=RADAR_TYPE_PAC, label="Suma opadów 1h (PAC)"),
-            SelectOptionDict(value=RADAR_TYPE_SAT, label="Zdjęcie satelitarne"),
-            SelectOptionDict(value=RADAR_TYPE_ALL_RADAR, label="Wszystkie mapy radarowe"),
-            SelectOptionDict(value=RADAR_TYPE_ALL, label="Wszystkie mapy + satelita"),
+            # ── Radar ──
+            SelectOptionDict(value=RADAR_TYPE_CMAX, label="Radar: Odbiciowość (CMAX)"),
+            SelectOptionDict(value=RADAR_TYPE_SRI, label="Radar: Opady (SRI)"),
+            SelectOptionDict(value=RADAR_TYPE_PAC, label="Radar: Suma opadów 1h (PAC)"),
+            SelectOptionDict(value=RADAR_TYPE_ALL_RADAR, label="Radar: Wszystkie (3 mapy)"),
+            # ── Satelita ──
+            SelectOptionDict(value=RADAR_TYPE_SAT, label="Satelita: Kolory naturalne"),
+            SelectOptionDict(value=RADAR_TYPE_INFRARED, label="Satelita: Zachmurzenie (IR)"),
+            SelectOptionDict(value=RADAR_TYPE_WATER_VAPOR, label="Satelita: Para wodna"),
+            SelectOptionDict(value=RADAR_TYPE_CLOUD_TYPE, label="Satelita: Typy chmur"),
+            SelectOptionDict(value=RADAR_TYPE_ALL_SAT, label="Satelita: Wszystkie (4 zdjęcia)"),
+            # ── Wszystko ──
+            SelectOptionDict(value=RADAR_TYPE_ALL, label="Wszystko: Radar + Satelita (7 map)"),
         ],
         mode=SelectSelectorMode.DROPDOWN,
     )
