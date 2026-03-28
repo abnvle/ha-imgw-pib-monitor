@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "imgw_pib_monitor"
-VERSION: Final = "2.2.0"
+VERSION: Final = "2.2.1"
 USER_AGENT: Final = f"HomeAssistant-IMGW-PIB-Monitor/{VERSION}"
 MANUFACTURER: Final = "Łukasz Kozik (lkozik@evilit.pl)"
 ATTRIBUTION: Final = (
