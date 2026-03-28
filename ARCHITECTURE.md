@@ -353,13 +353,24 @@ Camera (Home Assistant)
                 - device_info (urządzenie radarowe)
 ```
 
-#### Produkty radarowe
-| Produkt | Interwał | Opis |
-|---------|----------|------|
-| `cmax` | 5 min | Odbiciowość radarowa (dBZ) |
-| `sri` | 5 min | Intensywność opadu (mm/h) |
-| `pac` | 5 min | Suma opadu 1h (mm) |
-| `natural_color` | 15 min | Zdjęcie satelitarne |
+#### Produkty
+
+**Radar** (5 min):
+
+| Produkt | Opis |
+|---------|------|
+| `cmax` | Odbiciowość radarowa (dBZ) |
+| `sri` | Intensywność opadu (mm/h) |
+| `pac` | Suma opadu 1h (mm) |
+
+**Satelita** (15 min):
+
+| Produkt | Opis |
+|---------|------|
+| `natural_color` | Zdjęcie w kolorach naturalnych |
+| `infrared` | Zachmurzenie IR (24/7) |
+| `water_vapor` | Para wodna 6.2µm |
+| `cloud_type` | Typy chmur NWC SAF |
 
 #### Koordynator (`ImgwRadarCoordinator`)
 - Osobny per produkt (np. CMAX i SRI = 2 koordynatory)
@@ -369,7 +380,7 @@ Camera (Home Assistant)
 
 #### Tworzenie encji
 - Tworzone na podstawie wyboru użytkownika (dropdown w config flow)
-- Opcje: pojedynczy produkt, wszystkie radar, wszystkie + satelita
+- Opcje: pojedynczy produkt, wszystkie radar (3), wszystkie satelita (4), wszystko (7)
 - Przy zmianie opcji — nadmiarowe encje automatycznie usuwane z rejestru
 
 ### 5. Wyszukiwanie lokalizacji (`utils.py` i `config_flow.py`)

@@ -353,13 +353,24 @@ Camera (Home Assistant)
                 - device_info (radar device)
 ```
 
-#### Radar products
-| Product | Interval | Description |
-|---------|----------|-------------|
-| `cmax` | 5 min | Radar reflectivity (dBZ) |
-| `sri` | 5 min | Surface rainfall intensity (mm/h) |
-| `pac` | 5 min | 1h precipitation accumulation (mm) |
-| `natural_color` | 15 min | Satellite natural color image |
+#### Products
+
+**Radar** (5 min):
+
+| Product | Description |
+|---------|-------------|
+| `cmax` | Radar reflectivity (dBZ) |
+| `sri` | Surface rainfall intensity (mm/h) |
+| `pac` | 1h precipitation accumulation (mm) |
+
+**Satellite** (15 min):
+
+| Product | Description |
+|---------|-------------|
+| `natural_color` | Natural color satellite image |
+| `infrared` | IR cloud cover (24/7) |
+| `water_vapor` | Water vapor 6.2µm |
+| `cloud_type` | NWC SAF cloud classification |
 
 #### Coordinator (`ImgwRadarCoordinator`)
 - Separate per product (e.g., CMAX and SRI = 2 coordinators)
@@ -369,7 +380,7 @@ Camera (Home Assistant)
 
 #### Entity creation
 - Created based on user selection (dropdown in config flow)
-- Options: single product, all radar, all + satellite
+- Options: single product, all radar (3), all satellite (4), everything (7)
 - On option change — unused entities automatically removed from registry
 
 ### 5. Location Search (`utils.py` and `config_flow.py`)

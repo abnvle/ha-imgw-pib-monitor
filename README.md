@@ -265,21 +265,35 @@ Prognozy:
 
 Opcjonalne encje `camera.*` z mapami generowanymi przez IMGW API Proxy. Obraz 800×800 px z podkładem mapowym OSM, danymi IMGW i markerem lokalizacji. Odświeżanie co 5 minut (radar) lub 15 minut (satelita).
 
+#### Mapy radarowe (odświeżanie co 5 minut)
+
 | Mapa | Opis | Produkt |
 |---|---|---|
 | Odbiciowość (CMAX) | Maksymalna odbiciowość radarowa — pokazuje echo chmur i opadów | `cmax` |
 | Opady (SRI) | Intensywność opadu na ziemi w mm/h | `sri` |
 | Suma opadów 1h (PAC) | Skumulowany opad w ciągu ostatniej godziny w mm | `pac` |
-| Zdjęcie satelitarne | Obraz satelitarny w kolorach naturalnych z nałożonymi granicami | `natural_color` |
 
-Dostępne opcje w konfiguracji:
-- Pojedynczy produkt (dowolny z powyższych)
-- Wszystkie mapy radarowe (CMAX + SRI + PAC)
-- Wszystkie mapy + satelita (CMAX + SRI + PAC + zdjęcie satelitarne)
+#### Zdjęcia satelitarne (odświeżanie co 15 minut)
 
-Atrybuty każdej encji: współrzędne lokalizacji, typ produktu radarowego, timestamp obrazu.
+| Mapa | Opis | Produkt |
+|---|---|---|
+| Kolory naturalne | Obraz satelitarny w kolorach naturalnych | `natural_color` |
+| Zachmurzenie (IR) | Mapa chmur w podczerwieni — działa 24/7, niezależnie od pory dnia | `infrared` |
+| Para wodna | Kanał pary wodnej 6.2µm — ruchy mas powietrza | `water_vapor` |
+| Typy chmur | Klasyfikacja chmur NWC SAF — niskie, średnie, wysokie, Cb | `cloud_type` |
 
-Każdy obraz radarowy zawiera skalę kolorów z wartościami (dBZ, mm/h, mm) oraz datę i godzinę pomiaru.
+#### Opcje w konfiguracji
+
+| Opcja | Opis |
+|---|---|
+| Pojedynczy produkt | Dowolna mapa radarowa lub satelitarna |
+| Radar: Wszystkie (3 mapy) | CMAX + SRI + PAC |
+| Satelita: Wszystkie (4 zdjęcia) | Kolory naturalne + Zachmurzenie + Para wodna + Typy chmur |
+| Wszystko (7 map) | Radar + Satelita |
+
+Atrybuty każdej encji: współrzędne lokalizacji, typ produktu, timestamp obrazu.
+
+Mapy radarowe zawierają skalę kolorów z wartościami (dBZ, mm/h, mm). Zdjęcia zachmurzenia i typów chmur zawierają legendę kolorów. Każdy obraz zawiera datę i godzinę pomiaru.
 
 ## Instalacja
 
