@@ -15,8 +15,8 @@ from .const import (
     CONF_ENABLE_ENHANCED_WARNINGS_METEO,
     CONF_ENABLE_RADAR_CAMERA,
     CONF_ENABLE_WEATHER_FORECAST,
-    CONF_RADAR_TYPE,
-    RADAR_TYPE_NONE,
+    CONF_RADAR_PRODUCTS,
+    RADAR_OZE_UPDATE_INTERVAL,
     RADAR_SAT_UPDATE_INTERVAL,
     RADAR_UPDATE_INTERVAL,
     CONF_FORECAST_LAT,
@@ -34,6 +34,7 @@ from .utils import nominatim_reverse_geocode, reverse_geocode
 from .coordinator import (
     ImgwDataUpdateCoordinator,
     ImgwForecastCoordinator,
+    ImgwRadarAnimCoordinator,
     ImgwGlobalDataCoordinator,
     ImgwRadarCoordinator,
 )
@@ -85,8 +86,9 @@ def _async_cleanup_enhanced_warnings(hass: HomeAssistant, entry: ConfigEntry) ->
 
 def _async_cleanup_radar(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove radar camera entities and device from registries when radar is disabled."""
+    from .camera import ALL_KNOWN_PRODUCTS
     ent_reg = er.async_get(hass)
-    for product in ("cmax", "sri", "pac", "natural_color", "infrared", "water_vapor", "cloud_type"):
+    for product in ALL_KNOWN_PRODUCTS:
         entity_id = ent_reg.async_get_entity_id(
             "camera", DOMAIN, f"{DOMAIN}_radar_{product}_{entry.entry_id}"
         )
@@ -169,19 +171,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _async_cleanup_forecast(hass, entry)
 
     # Radar camera support (camera platform)
-    radar_type = entry.data.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
-    if entry.data.get(CONF_ENABLE_RADAR_CAMERA) and radar_type != RADAR_TYPE_NONE:
-        from .camera import ALL_PRODUCTS, ALL_SAT_PRODUCTS, get_selected_products
+    radar_products = entry.data.get(CONF_RADAR_PRODUCTS, [])
+    if entry.data.get(CONF_ENABLE_RADAR_CAMERA) and radar_products:
+        from .camera import ANIM_PRODUCTS, SAT_PRODUCTS, OZE_PRODUCTS, ANIM_PRODUCT_SET, ALL_KNOWN_PRODUCTS
 
         lat = entry.data.get(CONF_FORECAST_LAT, hass.config.latitude)
         lon = entry.data.get(CONF_FORECAST_LON, hass.config.longitude)
-        products = get_selected_products(radar_type)
 
         loaded_products = []
-        for product in products:
+        for product in radar_products:
             try:
-                interval = RADAR_SAT_UPDATE_INTERVAL if product in ALL_SAT_PRODUCTS else RADAR_UPDATE_INTERVAL
-                coordinator = ImgwRadarCoordinator(hass, lat, lon, product, interval)
+                if product in ANIM_PRODUCT_SET:
+                    base_product = ANIM_PRODUCTS[product]
+                    coordinator = ImgwRadarAnimCoordinator(hass, lat, lon, base_product, 24)
+                elif product in OZE_PRODUCTS:
+                    coordinator = ImgwRadarCoordinator(hass, lat, lon, product, RADAR_OZE_UPDATE_INTERVAL)
+                elif product in SAT_PRODUCTS:
+                    coordinator = ImgwRadarCoordinator(hass, lat, lon, product, RADAR_SAT_UPDATE_INTERVAL)
+                else:
+                    coordinator = ImgwRadarCoordinator(hass, lat, lon, product, RADAR_UPDATE_INTERVAL)
                 await coordinator.async_config_entry_first_refresh()
                 hass.data[DOMAIN][f"{entry.entry_id}_radar_{product}"] = coordinator
                 loaded_products.append(product)
@@ -190,8 +198,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Clean up products that are no longer selected
         ent_reg = er.async_get(hass)
-        for product in ALL_PRODUCTS:
-            if product not in products:
+        for product in ALL_KNOWN_PRODUCTS:
+            if product not in radar_products:
                 entity_id = ent_reg.async_get_entity_id(
                     "camera", DOMAIN, f"{DOMAIN}_radar_{product}_{entry.entry_id}"
                 )
@@ -283,11 +291,50 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         )
         new_data = {**config_entry.data}
         new_data.setdefault(CONF_ENABLE_RADAR_CAMERA, False)
-        new_data.setdefault(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
+        new_data.setdefault("radar_type", "none")
         hass.config_entries.async_update_entry(
             config_entry, data=new_data, version=11
         )
+    if config_entry.version < 12:
+        _LOGGER.debug(
+            "Migrating config entry %s from version %s to 12 (radar_type → radar_products)",
+            config_entry.entry_id,
+            config_entry.version,
+        )
+        new_data = {**config_entry.data}
+        # Convert old radar_type string to radar_products list
+        old_type = new_data.pop("radar_type", "none")
+        products = _migrate_radar_type_to_products(old_type)
+        new_data[CONF_RADAR_PRODUCTS] = products
+        new_data[CONF_ENABLE_RADAR_CAMERA] = len(products) > 0
+        hass.config_entries.async_update_entry(
+            config_entry, data=new_data, version=12
+        )
     return True
+
+
+def _migrate_radar_type_to_products(old_type: str) -> list[str]:
+    """Convert legacy radar_type string to list of products."""
+    MIGRATION_MAP = {
+        "none": [],
+        "cmax": ["cmax"],
+        "sri": ["sri"],
+        "pac": ["pac"],
+        "natural_color": ["natural_color"],
+        "infrared": ["infrared"],
+        "water_vapor": ["water_vapor"],
+        "cloud_type": ["cloud_type"],
+        "oze_pv": ["oze_pv"],
+        "oze_wind": ["oze_wind"],
+        "oze_pv_anim": ["oze_pv_anim"],
+        "oze_wind_anim": ["oze_wind_anim"],
+        "both": ["cmax", "sri"],
+        "all_radar": ["cmax", "sri", "pac"],
+        "all_sat": ["natural_color", "infrared", "water_vapor", "cloud_type"],
+        "all_oze": ["oze_pv", "oze_wind", "oze_pv_anim", "oze_wind_anim"],
+        "all": ["cmax", "sri", "pac", "natural_color", "infrared", "water_vapor", "cloud_type", "oze_pv", "oze_wind", "oze_pv_anim", "oze_wind_anim"],
+    }
+    return MIGRATION_MAP.get(old_type, [])
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -313,7 +360,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(f"{entry.entry_id}_forecast", None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_binary_sensor", None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_radar", None)
-        for p in ("cmax", "sri", "pac", "natural_color", "infrared", "water_vapor", "cloud_type"):
+        from .camera import ALL_KNOWN_PRODUCTS
+        for p in ALL_KNOWN_PRODUCTS:
             hass.data[DOMAIN].pop(f"{entry.entry_id}_radar_{p}", None)
 
         # Recalculate global coordinator interval based on remaining entries

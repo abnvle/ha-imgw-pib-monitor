@@ -20,7 +20,7 @@
           "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
           "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)",
-          "radar_type": "Mapa radarowa"
+          "radar_products": "Mapy radarowe i satelitarne"
         }
       },
       "manual_start": {
@@ -49,7 +49,7 @@
           "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
           "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)",
-          "radar_type": "Mapa radarowa"
+          "radar_products": "Mapy radarowe i satelitarne"
         }
       },
       "select": {
@@ -94,7 +94,7 @@
           "use_powiat_for_warnings": "Filtruj ostrzeżenia tylko dla mojego powiatu",
           "enable_weather_forecast": "Pobieraj prognozę pogody (dzienna i godzinowa)",
           "enable_enhanced_warnings_meteo": "Włącz rozszerzone ostrzeżenia meteo (meteo.imgw.pl)",
-          "radar_type": "Mapa radarowa"
+          "radar_products": "Mapy radarowe i satelitarne"
         }
       }
     }

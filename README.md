@@ -261,9 +261,9 @@ Prognozy:
 - **Dzienna** - temperatura max/min, wiatr, opady (grupowanie dzień/noc)
 - **Godzinowa** - pełne dane pogodowe na każdą godzinę
 
-### Mapy radarowe i satelitarne (encje camera)
+### Mapy radarowe, satelitarne i OZE (encje camera)
 
-Opcjonalne encje `camera.*` z mapami generowanymi przez IMGW API Proxy. Obraz 800×800 px z podkładem mapowym OSM, danymi IMGW i markerem lokalizacji. Odświeżanie co 5 minut (radar) lub 15 minut (satelita).
+Opcjonalne encje `camera.*` z mapami generowanymi przez IMGW API Proxy. Obraz 800×800 px z podkładem mapowym OSM, danymi IMGW i markerem lokalizacji.
 
 #### Mapy radarowe (odświeżanie co 5 minut)
 
@@ -273,7 +273,7 @@ Opcjonalne encje `camera.*` z mapami generowanymi przez IMGW API Proxy. Obraz 80
 | Opady (SRI) | Intensywność opadu na ziemi w mm/h | `sri` |
 | Suma opadów 1h (PAC) | Skumulowany opad w ciągu ostatniej godziny w mm | `pac` |
 
-#### Zdjęcia satelitarne (odświeżanie co 15 minut)
+#### Zdjęcia satelitarne (odświeżanie co 5 minut)
 
 | Mapa | Opis | Produkt |
 |---|---|---|
@@ -282,18 +282,49 @@ Opcjonalne encje `camera.*` z mapami generowanymi przez IMGW API Proxy. Obraz 80
 | Para wodna | Kanał pary wodnej 6.2µm — ruchy mas powietrza | `water_vapor` |
 | Typy chmur | Klasyfikacja chmur NWC SAF — niskie, średnie, wysokie, Cb | `cloud_type` |
 
+#### Prognozy OZE — Odnawialne Źródła Energii (odświeżanie co pełną godzinę)
+
+Mapy prognoz generacji energii z odnawialnych źródeł na podstawie modelu ECMWF IFS 9km. Dane identyczne jak na meteo.imgw.pl, aktualizowane co pełną godzinę UTC. Animacje pokazują prognozę na 24 godziny do przodu.
+
+| Mapa | Opis | Produkt |
+|---|---|---|
+| Generacja PV | Prognoza generacji energii fotowoltaicznej (% mocy nominalnej) | `oze_pv` |
+| Generacja wiatr | Prognoza generacji energii wiatrowej (% mocy nominalnej) | `oze_wind` |
+| Animacja PV (GIF) | Animowany GIF z prognozą PV na 24h do przodu | `oze_pv_anim` |
+| Animacja wiatr (GIF) | Animowany GIF z prognozą wiatru na 24h do przodu | `oze_wind_anim` |
+
+<table>
+<tr>
+<td width="50%">
+
+**Prognoza generacji PV (animacja 24h)**
+
+![Animacja PV](docs/pv_animation.gif)
+
+</td>
+<td width="50%">
+
+**Prognoza generacji wiatrowej (animacja 24h)**
+
+![Animacja wiatr](docs/wind_animation.gif)
+
+</td>
+</tr>
+</table>
+
 #### Opcje w konfiguracji
 
-| Opcja | Opis |
+W konfiguracji dostępny jest multi-select — możesz wybrać dowolną kombinację produktów:
+
+| Kategoria | Produkty |
 |---|---|
-| Pojedynczy produkt | Dowolna mapa radarowa lub satelitarna |
-| Radar: Wszystkie (3 mapy) | CMAX + SRI + PAC |
-| Satelita: Wszystkie (4 zdjęcia) | Kolory naturalne + Zachmurzenie + Para wodna + Typy chmur |
-| Wszystko (7 map) | Radar + Satelita |
+| Radar | CMAX, SRI, PAC |
+| Satelita | Kolory naturalne, Zachmurzenie (IR), Para wodna, Typy chmur |
+| OZE | Generacja PV, Generacja wiatr, Animacja PV, Animacja wiatr |
 
 Atrybuty każdej encji: współrzędne lokalizacji, typ produktu, timestamp obrazu.
 
-Mapy radarowe zawierają skalę kolorów z wartościami (dBZ, mm/h, mm). Zdjęcia zachmurzenia i typów chmur zawierają legendę kolorów. Każdy obraz zawiera datę i godzinę pomiaru.
+Mapy radarowe zawierają skalę kolorów z wartościami (dBZ, mm/h, mm). Zdjęcia zachmurzenia i typów chmur zawierają legendę kolorów. Mapy OZE zawierają skalę generacji (0-100%). Każdy obraz zawiera datę i godzinę w czasie polskim.
 
 ## Instalacja
 
@@ -597,10 +628,15 @@ Dane hydrologiczne (hydro-back API — to samo źródło co portal hydro.imgw.pl
 Dane rozszerzone:
 - `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` (ostrzeżenia rozszerzone)
 
-IMGW API Proxy (prognoza, radar, koordynaty stacji):
+IMGW API Proxy (prognoza, radar, satelita, OZE, koordynaty stacji):
 - `https://imgw-api-proxy.evtlab.pl/forecast` (prognoza pogody)
-- `https://imgw-api-proxy.evtlab.pl/radar?lat=...&lon=...&product=...` (mapy radarowe i satelitarne)
+- `https://imgw-api-proxy.evtlab.pl/radar?lat=...&lon=...&product=...` (mapy radarowe, satelitarne i OZE)
+- `https://imgw-api-proxy.evtlab.pl/radar?...&product=oze_pv&hour=0` (prognoza OZE — bieżąca godzina)
+- `https://imgw-api-proxy.evtlab.pl/radar?...&product=oze_pv&animate=24` (animacja OZE 24h)
 - `https://imgw-api-proxy.evtlab.pl/stations/synop` (koordynaty stacji synoptycznych)
+
+Dane OZE (źródło: model ECMWF IFS 9km via IMGW):
+- `https://tilesources-c.imgw.pl/vector/oze/epsg3857/latest/` (obrazy prognoz OZE)
 
 > Źródłem pochodzenia danych pomiarowych jest Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy.
 

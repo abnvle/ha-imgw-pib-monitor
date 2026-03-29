@@ -35,7 +35,6 @@ class ImgwApiClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
         """Initialize the API client."""
         self._session = session
-        self._hydro_session: aiohttp.ClientSession | None = None
 
     async def _fetch(self, url: str) -> list[dict[str, Any]] | dict[str, Any]:
         """Fetch data from the API."""
@@ -64,10 +63,13 @@ class ImgwApiClient:
         return data
 
     async def _fetch_hydro_back(self, url: str, endpoint_name: str) -> list[dict[str, Any]] | dict[str, Any]:
-        """Fetch data from hydro-back API using dedicated session."""
+        """Fetch data from hydro-back API with User-Agent header."""
         try:
-            session = self._get_hydro_session()
-            async with session.get(url) as resp:
+            async with self._session.get(
+                url,
+                headers={"User-Agent": USER_AGENT},
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
                 if resp.status != 200:
                     _LOGGER.warning(
                         "Hydro-back %s returned status %s",
@@ -165,25 +167,8 @@ class ImgwApiClient:
                 stations[sid] = label
         return stations
 
-    def _get_hydro_session(self) -> aiohttp.ClientSession:
-        """Return a reusable session for hydro-back API.
-
-        hydro-back.imgw.pl rejects requests without a proper User-Agent
-        header (403), and the shared HA session may override per-request
-        headers via multidict merging. A dedicated session avoids this.
-        """
-        if self._hydro_session is None or self._hydro_session.closed:
-            self._hydro_session = aiohttp.ClientSession(
-                headers={"User-Agent": USER_AGENT},
-                timeout=aiohttp.ClientTimeout(total=30),
-            )
-        return self._hydro_session
-
     async def close(self) -> None:
-        """Close any internally managed sessions."""
-        if self._hydro_session and not self._hydro_session.closed:
-            await self._hydro_session.close()
-            self._hydro_session = None
+        """Clean up (no-op, HA manages the shared session)."""
 
     async def get_hydro_station_details(self, station_id: str) -> dict[str, Any]:
         """Get extended hydro data (alarm levels, trend) from hydro-back API."""

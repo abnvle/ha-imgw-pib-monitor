@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "imgw_pib_monitor"
-VERSION: Final = "2.2.1"
+VERSION: Final = "2.2.2"
 USER_AGENT: Final = f"HomeAssistant-IMGW-PIB-Monitor/{VERSION}"
 MANUFACTURER: Final = "Łukasz Kozik (lkozik@evilit.pl)"
 ATTRIBUTION: Final = (
@@ -193,20 +193,12 @@ SYNOP_STATIONS: Final[dict[str, tuple[float, float]]] = {
 
 # Radar camera config
 CONF_ENABLE_RADAR_CAMERA: Final = "enable_radar_camera"
+CONF_RADAR_PRODUCTS: Final = "radar_products"
+# Legacy key — kept for migration
 CONF_RADAR_TYPE: Final = "radar_type"
-RADAR_TYPE_NONE: Final = "none"
-RADAR_TYPE_CMAX: Final = "cmax"
-RADAR_TYPE_SRI: Final = "sri"
-RADAR_TYPE_PAC: Final = "pac"
-RADAR_TYPE_SAT: Final = "natural_color"
-RADAR_TYPE_INFRARED: Final = "infrared"
-RADAR_TYPE_WATER_VAPOR: Final = "water_vapor"
-RADAR_TYPE_CLOUD_TYPE: Final = "cloud_type"
-RADAR_TYPE_ALL_RADAR: Final = "all_radar"
-RADAR_TYPE_ALL_SAT: Final = "all_sat"
-RADAR_TYPE_ALL: Final = "all"
 RADAR_UPDATE_INTERVAL: Final = 300  # 5 minutes, in seconds
-RADAR_SAT_UPDATE_INTERVAL: Final = 900  # 15 minutes for satellite
+RADAR_SAT_UPDATE_INTERVAL: Final = 300  # 5 minutes for satellite (same as radar)
+RADAR_OZE_UPDATE_INTERVAL: Final = 300  # 5 minutes — same as radar/satellite
 
 # Forecast (weather entity) config
 CONF_ENABLE_WEATHER_FORECAST: Final = "enable_weather_forecast"

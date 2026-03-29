@@ -91,20 +91,9 @@ class TestImgwApiClientHydro:
 
     @pytest.mark.asyncio
     async def test_get_all_hydro_data(self):
-        """Hydro data is fetched via hydro-back dedicated session."""
-        session = _make_mock_session([])  # main session not used for hydro
+        """Hydro data is fetched via main session with User-Agent header."""
+        session = _make_mock_session(SAMPLE_HYDRO_DATA)
         client = ImgwApiClient(session)
-        # Mock the hydro session
-        mock_resp = AsyncMock()
-        mock_resp.status = 200
-        mock_resp.json = AsyncMock(return_value=SAMPLE_HYDRO_DATA)
-        mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_resp.__aexit__ = AsyncMock(return_value=False)
-
-        mock_hydro_session = MagicMock(spec=aiohttp.ClientSession)
-        mock_hydro_session.closed = False
-        mock_hydro_session.get = MagicMock(return_value=mock_resp)
-        client._hydro_session = mock_hydro_session
 
         result = await client.get_all_hydro_data()
         assert len(result) == 1
@@ -112,19 +101,8 @@ class TestImgwApiClientHydro:
 
     @pytest.mark.asyncio
     async def test_get_hydro_stations_includes_river(self):
-        session = _make_mock_session([])
+        session = _make_mock_session(SAMPLE_HYDRO_DATA)
         client = ImgwApiClient(session)
-        # Mock the hydro session
-        mock_resp = AsyncMock()
-        mock_resp.status = 200
-        mock_resp.json = AsyncMock(return_value=SAMPLE_HYDRO_DATA)
-        mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_resp.__aexit__ = AsyncMock(return_value=False)
-
-        mock_hydro_session = MagicMock(spec=aiohttp.ClientSession)
-        mock_hydro_session.closed = False
-        mock_hydro_session.get = MagicMock(return_value=mock_resp)
-        client._hydro_session = mock_hydro_session
 
         result = await client.get_hydro_stations()
         assert "150190370" in result

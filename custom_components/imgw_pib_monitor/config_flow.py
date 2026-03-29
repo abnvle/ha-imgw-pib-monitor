@@ -32,18 +32,7 @@ from .const import (
     CONF_ENABLE_ENHANCED_WARNINGS_METEO,
     CONF_ENABLE_RADAR_CAMERA,
     CONF_ENABLE_WARNINGS_HYDRO,
-    CONF_RADAR_TYPE,
-    RADAR_TYPE_ALL,
-    RADAR_TYPE_ALL_RADAR,
-    RADAR_TYPE_ALL_SAT,
-    RADAR_TYPE_CLOUD_TYPE,
-    RADAR_TYPE_CMAX,
-    RADAR_TYPE_INFRARED,
-    RADAR_TYPE_NONE,
-    RADAR_TYPE_PAC,
-    RADAR_TYPE_SAT,
-    RADAR_TYPE_SRI,
-    RADAR_TYPE_WATER_VAPOR,
+    CONF_RADAR_PRODUCTS,
     CONF_ENABLE_WARNINGS_METEO,
     CONF_ENABLE_WEATHER_FORECAST,
     CONF_FORECAST_LAT,
@@ -75,25 +64,23 @@ from .utils import geocode_location, haversine, nominatim_reverse_geocode, rever
 
 _LOGGER = logging.getLogger(__name__)
 
-RADAR_TYPE_SELECTOR = SelectSelector(
+RADAR_PRODUCTS_SELECTOR = SelectSelector(
     SelectSelectorConfig(
         options=[
-            SelectOptionDict(value=RADAR_TYPE_NONE, label="Wyłączona"),
-            # ── Radar ──
-            SelectOptionDict(value=RADAR_TYPE_CMAX, label="Radar: Odbiciowość (CMAX)"),
-            SelectOptionDict(value=RADAR_TYPE_SRI, label="Radar: Opady (SRI)"),
-            SelectOptionDict(value=RADAR_TYPE_PAC, label="Radar: Suma opadów 1h (PAC)"),
-            SelectOptionDict(value=RADAR_TYPE_ALL_RADAR, label="Radar: Wszystkie (3 mapy)"),
-            # ── Satelita ──
-            SelectOptionDict(value=RADAR_TYPE_SAT, label="Satelita: Kolory naturalne"),
-            SelectOptionDict(value=RADAR_TYPE_INFRARED, label="Satelita: Zachmurzenie (IR)"),
-            SelectOptionDict(value=RADAR_TYPE_WATER_VAPOR, label="Satelita: Para wodna"),
-            SelectOptionDict(value=RADAR_TYPE_CLOUD_TYPE, label="Satelita: Typy chmur"),
-            SelectOptionDict(value=RADAR_TYPE_ALL_SAT, label="Satelita: Wszystkie (4 zdjęcia)"),
-            # ── Wszystko ──
-            SelectOptionDict(value=RADAR_TYPE_ALL, label="Wszystko: Radar + Satelita (7 map)"),
+            SelectOptionDict(value="cmax", label="Radar: Odbiciowość (CMAX)"),
+            SelectOptionDict(value="sri", label="Radar: Opady (SRI)"),
+            SelectOptionDict(value="pac", label="Radar: Suma opadów 1h (PAC)"),
+            SelectOptionDict(value="natural_color", label="Satelita: Kolory naturalne"),
+            SelectOptionDict(value="infrared", label="Satelita: Zachmurzenie (IR)"),
+            SelectOptionDict(value="water_vapor", label="Satelita: Para wodna"),
+            SelectOptionDict(value="cloud_type", label="Satelita: Typy chmur"),
+            SelectOptionDict(value="oze_pv", label="OZE: Prognoza generacji PV"),
+            SelectOptionDict(value="oze_wind", label="OZE: Prognoza generacji wiatr"),
+            SelectOptionDict(value="oze_pv_anim", label="OZE: Animacja PV (24h GIF)"),
+            SelectOptionDict(value="oze_wind_anim", label="OZE: Animacja wiatr (24h GIF)"),
         ],
         mode=SelectSelectorMode.DROPDOWN,
+        multiple=True,
     )
 )
 
@@ -145,7 +132,7 @@ def _find_nearest_station(
 class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a minimalist and smart config flow for IMGW-PIB Monitor."""
 
-    VERSION = 11
+    VERSION = 12
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -345,10 +332,10 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 final_config[CONF_FORECAST_LON] = self.hass.config.longitude
 
             # Radar camera
-            radar_type = user_input.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
-            if radar_type != RADAR_TYPE_NONE:
+            radar_products = user_input.get(CONF_RADAR_PRODUCTS, [])
+            if radar_products:
                 final_config[CONF_ENABLE_RADAR_CAMERA] = True
-                final_config[CONF_RADAR_TYPE] = radar_type
+                final_config[CONF_RADAR_PRODUCTS] = radar_products
 
             # Location name
             loc_name = self._detected_location_name or "IMGW Auto-Discovery"
@@ -379,7 +366,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Weather forecast & radar camera
         schema[vol.Optional(CONF_ENABLE_WEATHER_FORECAST, default=False)] = BooleanSelector()
-        schema[vol.Optional(CONF_RADAR_TYPE, default=RADAR_TYPE_NONE)] = RADAR_TYPE_SELECTOR
+        schema[vol.Optional(CONF_RADAR_PRODUCTS, default=[])] = RADAR_PRODUCTS_SELECTOR
 
         return self.async_show_form(step_id="auto_options", data_schema=vol.Schema(schema))
 
@@ -730,10 +717,10 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
                 final_config[CONF_FORECAST_LON] = lon
 
             # Radar camera
-            radar_type = user_input.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
-            if radar_type != RADAR_TYPE_NONE:
+            radar_products = user_input.get(CONF_RADAR_PRODUCTS, [])
+            if radar_products:
                 final_config[CONF_ENABLE_RADAR_CAMERA] = True
-                final_config[CONF_RADAR_TYPE] = radar_type
+                final_config[CONF_RADAR_PRODUCTS] = radar_products
 
             # Location name
             location_name = self._detected_location_name or self._data.get("location_name", "Manual Setup")
@@ -764,7 +751,7 @@ class ImgwPibMonitorConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Weather forecast & radar camera
         schema[vol.Optional(CONF_ENABLE_WEATHER_FORECAST, default=False)] = BooleanSelector()
-        schema[vol.Optional(CONF_RADAR_TYPE, default=RADAR_TYPE_NONE)] = RADAR_TYPE_SELECTOR
+        schema[vol.Optional(CONF_RADAR_PRODUCTS, default=[])] = RADAR_PRODUCTS_SELECTOR
 
         return self.async_show_form(step_id="manual_options", data_schema=vol.Schema(schema))
 
@@ -852,9 +839,9 @@ class ImgwPibMonitorOptionsFlow(OptionsFlow):
                 new_data[CONF_FORECAST_LON] = self.hass.config.longitude
 
             # Handle radar camera
-            radar_type = user_input.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
-            new_data[CONF_ENABLE_RADAR_CAMERA] = radar_type != RADAR_TYPE_NONE
-            new_data[CONF_RADAR_TYPE] = radar_type
+            radar_products = user_input.get(CONF_RADAR_PRODUCTS, [])
+            new_data[CONF_ENABLE_RADAR_CAMERA] = len(radar_products) > 0
+            new_data[CONF_RADAR_PRODUCTS] = radar_products
 
             # Handle enhanced warnings toggle
             enable_enhanced = user_input.get(CONF_ENABLE_ENHANCED_WARNINGS_METEO, False)
@@ -916,11 +903,11 @@ class ImgwPibMonitorOptionsFlow(OptionsFlow):
             default=current_enhanced,
         )] = BooleanSelector()
 
-        current_radar_type = self._config_entry.data.get(CONF_RADAR_TYPE, RADAR_TYPE_NONE)
+        current_radar_products = self._config_entry.data.get(CONF_RADAR_PRODUCTS, [])
         schema[vol.Optional(
-            CONF_RADAR_TYPE,
-            default=current_radar_type,
-        )] = RADAR_TYPE_SELECTOR
+            CONF_RADAR_PRODUCTS,
+            default=current_radar_products,
+        )] = RADAR_PRODUCTS_SELECTOR
 
         return self.async_show_form(
             step_id="init",

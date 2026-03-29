@@ -4,7 +4,7 @@
 
 ## Przegląd
 
-Integracja Home Assistant dla publicznego API IMGW-PIB (Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy). Wykorzystuje wielostopniową architekturę koordynatorów do efektywnego pobierania danych z 7 endpointów API, obsługuje do ~90 encji (sensory, sensory binarne, encja pogodowa) oraz opcjonalną prognozę pogody z danymi dziennymi i godzinowymi. Oferuje dwa tryby konfiguracji z zaawansowanym geokodowaniem i filtrowaniem ostrzeżeń na poziomie powiatów.
+Integracja Home Assistant dla publicznego API IMGW-PIB (Instytut Meteorologii i Gospodarki Wodnej - Państwowy Instytut Badawczy). Wykorzystuje wielostopniową architekturę koordynatorów do efektywnego pobierania danych z 7 endpointów API, obsługuje do ~90+ encji (sensory, sensory binarne, encja pogodowa, kamery radarowe/satelitarne/OZE) oraz opcjonalną prognozę pogody z danymi dziennymi i godzinowymi. Oferuje dwa tryby konfiguracji z zaawansowanym geokodowaniem i filtrowaniem ostrzeżeń na poziomie powiatów.
 
 ## Architektura
 
@@ -338,24 +338,30 @@ BinarySensorEntity (Home Assistant)
 - Encje tworzone zawsze, nawet gdy API chwilowo niedostępne
 - Stan `off` gdy brak danych (nie `unavailable`)
 
-### 4c. Kamery radarowe i satelitarne (`camera.py`)
+### 4c. Kamery radarowe, satelitarne i OZE (`camera.py`)
 
-Platforma `camera` dla map radarowych i satelitarnych z IMGW API Proxy:
+Platforma `camera` dla map radarowych, satelitarnych i prognoz OZE z IMGW API Proxy:
 
 #### Hierarchia klas
 ```
 Camera (Home Assistant)
-    └── CoordinatorEntity[ImgwRadarCoordinator]
-        └── ImgwRadarCamera
+    ├── CoordinatorEntity[ImgwRadarCoordinator]
+    │   └── ImgwRadarCamera (PNG — radar, satelita, OZE statyczne)
+    │       └── implements:
+    │           - async_camera_image (PNG z proxy)
+    │           - extra_state_attributes (lat/lon, produkt, timestamp)
+    │           - device_info (urządzenie radarowe)
+    └── CoordinatorEntity[ImgwRadarAnimCoordinator]
+        └── ImgwRadarAnimCamera (GIF — animacje OZE)
             └── implements:
-                - async_camera_image (PNG z proxy)
-                - extra_state_attributes (lat/lon, produkt, timestamp)
-                - device_info (urządzenie radarowe)
+                - async_camera_image (animowany GIF z proxy)
+                - content_type = "image/gif"
+                - frame_interval = 300 (5 min)
 ```
 
 #### Produkty
 
-**Radar** (5 min):
+**Radar** (odświeżanie co 5 min):
 
 | Produkt | Opis |
 |---------|------|
@@ -363,7 +369,7 @@ Camera (Home Assistant)
 | `sri` | Intensywność opadu (mm/h) |
 | `pac` | Suma opadu 1h (mm) |
 
-**Satelita** (15 min):
+**Satelita** (odświeżanie co 5 min):
 
 | Produkt | Opis |
 |---------|------|
@@ -372,15 +378,35 @@ Camera (Home Assistant)
 | `water_vapor` | Para wodna 6.2µm |
 | `cloud_type` | Typy chmur NWC SAF |
 
-#### Koordynator (`ImgwRadarCoordinator`)
+**OZE — Odnawialne Źródła Energii** (odświeżanie co pełną godzinę):
+
+| Produkt | Opis | Typ |
+|---------|------|-----|
+| `oze_pv` | Prognoza generacji fotowoltaicznej (% mocy) | PNG |
+| `oze_wind` | Prognoza generacji wiatrowej (% mocy) | PNG |
+| `oze_pv_anim` | Animacja prognozy PV na 24h do przodu | GIF |
+| `oze_wind_anim` | Animacja prognozy wiatru na 24h do przodu | GIF |
+
+Dane OZE pochodzą z modelu ECMWF IFS 9km (rozdzielczość źródłowa 113×132 px). Proxy upscaluje obraz z nearest-neighbor (zachowanie kolorów legendy), nakłada podkład OSM i marker lokalizacji. Timestampy przypisane do pełnych godzin UTC — identycznie jak na meteo.imgw.pl.
+
+#### Koordynatory
+
+**`ImgwRadarCoordinator`** (radar, satelita, OZE statyczne):
 - Osobny per produkt (np. CMAX i SRI = 2 koordynatory)
 - Pobiera gotowy PNG 800×800 z `imgw-api-proxy.evtlab.pl/radar`
 - Proxy komponuje: podkład OSM + dane IMGW + marker + legenda + timestamp
 - Odporny na awarie — błąd jednego produktu nie blokuje innych
+- Interwał: 5 min (radar/satelita), 30 min (OZE)
+
+**`ImgwRadarAnimCoordinator`** (animacje OZE):
+- Pobiera animowany GIF z proxy (`?animate=24`)
+- GIF zawiera 25 klatek (bieżąca godzina + 24h do przodu)
+- Timeout 60 sek (GIF-y generowane server-side z gifenc)
+- Interwał: 30 min
+- Przy błędzie zachowuje poprzedni GIF (nie `UpdateFailed`)
 
 #### Tworzenie encji
-- Tworzone na podstawie wyboru użytkownika (dropdown w config flow)
-- Opcje: pojedynczy produkt, wszystkie radar (3), wszystkie satelita (4), wszystko (7)
+- Multi-select w config flow — dowolna kombinacja z 11 produktów
 - Przy zmianie opcji — nadmiarowe encje automatycznie usuwane z rejestru
 
 ### 5. Wyszukiwanie lokalizacji (`utils.py` i `config_flow.py`)
@@ -673,6 +699,12 @@ for k, v in raw_attrs.items():
 | Enhanced Warnings | `https://meteo.imgw.pl/api/meteo/messages/v1/osmet/latest/osmet-teryt` | JSON | Ostrzeżenia rozszerzone (16 zjawisk, 3 stopnie) |
 | Hydro (szczegóły) | `https://hydro-back.imgw.pl/station/hydro/status?id=...` | JSON | Szczegóły stacji (per stacja) |
 | Forecast | `https://imgw-api-proxy.evtlab.pl/forecast` | JSON | Prognoza pogody (aktualna, dzienna, godzinowa) |
+| Radar/Sat/OZE | `https://imgw-api-proxy.evtlab.pl/radar?lat=...&lon=...&product=...` | PNG | Kompozytowe mapy 800×800 (OSM + dane + marker + legenda) |
+| OZE animacja | `https://imgw-api-proxy.evtlab.pl/radar?...&animate=24` | GIF | Animowany GIF prognozy OZE (24h, 25 klatek) |
+| OZE źródło | `https://tilesources-c.imgw.pl/vector/oze/epsg3857/latest/` | PNG | Surowe dane ECMWF IFS 9km (113×132 px) |
+| Sat tiles | `https://tilesources-a.imgw.pl/tileserver.php?/index.json` | JSON/PNG | Indeks warstw + kafelki satelitarne (zoom 6) |
+| Radar list | `https://meteo.imgw.pl/api/radars/v1/list/{product}` | JSON | Lista dostępnych obrazów radarowych |
+| Stations | `https://imgw-api-proxy.evtlab.pl/stations/synop` | JSON | Współrzędne stacji synoptycznych |
 
 ## Wymagania techniczne
 

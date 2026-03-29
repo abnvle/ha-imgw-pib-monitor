@@ -20,7 +20,7 @@
           "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filter warnings for my county only",
           "enable_weather_forecast": "Enable weather forecast (daily & hourly)",
-          "radar_type": "Radar map"
+          "radar_products": "Radar & satellite maps"
         }
       },
       "manual_start": {
@@ -49,7 +49,7 @@
           "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)",
           "use_powiat_for_warnings": "Filter warnings for my county only",
           "enable_weather_forecast": "Enable weather forecast (daily & hourly)",
-          "radar_type": "Radar map"
+          "radar_products": "Radar & satellite maps"
         }
       },
       "select": {
@@ -94,7 +94,7 @@
           "use_powiat_for_warnings": "Filter warnings for my county only",
           "enable_weather_forecast": "Enable weather forecast (daily & hourly)",
           "enable_enhanced_warnings_meteo": "Enable enhanced weather warnings (meteo.imgw.pl)",
-          "radar_type": "Radar map"
+          "radar_products": "Radar & satellite maps"
         }
       }
     }

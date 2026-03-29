@@ -40,6 +40,7 @@ from .const import (
     FORECAST_API_URL,
     FORECAST_UPDATE_INTERVAL,
     HYDRO_TREND_MAP,
+    RADAR_OZE_UPDATE_INTERVAL,
     RADAR_UPDATE_INTERVAL,
     SYNOP_STATIONS,
     VOIVODESHIP_CAPITALS,
@@ -111,32 +112,23 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for e in self.hass.config_entries.async_entries(DOMAIN)
         )
 
-        coros = [
-            _fetch_with_limit(self.api.get_all_synop_data(), "synop"),
-            _fetch_with_limit(self.api.get_all_hydro_data(), "hydro"),
-            _fetch_with_limit(self.api.get_all_meteo_data(), "meteo"),
-            _fetch_with_limit(self.api.get_warnings_meteo(), "warnings_meteo"),
-            _fetch_with_limit(self.api.get_warnings_hydro(), "warnings_hydro"),
-        ]
+        fetches = {
+            DATA_TYPE_SYNOP: _fetch_with_limit(self.api.get_all_synop_data(), "synop"),
+            DATA_TYPE_HYDRO: _fetch_with_limit(self.api.get_all_hydro_data(), "hydro"),
+            DATA_TYPE_METEO: _fetch_with_limit(self.api.get_all_meteo_data(), "meteo"),
+            DATA_TYPE_WARNINGS_METEO: _fetch_with_limit(self.api.get_warnings_meteo(), "warnings_meteo"),
+            DATA_TYPE_WARNINGS_HYDRO: _fetch_with_limit(self.api.get_warnings_hydro(), "warnings_hydro"),
+        }
         if fetch_enhanced:
-            coros.append(
-                _fetch_with_limit(
-                    self.api.get_enhanced_warnings_meteo(),
-                    "enhanced_warnings_meteo",
-                    default={},
-                )
+            fetches[DATA_TYPE_WARNINGS_METEO_ENHANCED] = _fetch_with_limit(
+                self.api.get_enhanced_warnings_meteo(), "enhanced_warnings_meteo", default={},
             )
 
-        results = await asyncio.gather(*coros)
+        keys = list(fetches.keys())
+        results = await asyncio.gather(*fetches.values())
 
-        data: dict[str, Any] = {
-            DATA_TYPE_SYNOP: results[0],
-            DATA_TYPE_HYDRO: results[1],
-            DATA_TYPE_METEO: results[2],
-            DATA_TYPE_WARNINGS_METEO: results[3],
-            DATA_TYPE_WARNINGS_HYDRO: results[4],
-            DATA_TYPE_WARNINGS_METEO_ENHANCED: results[5] if fetch_enhanced else {},
-        }
+        data: dict[str, Any] = {k: v for k, v in zip(keys, results)}
+        data.setdefault(DATA_TYPE_WARNINGS_METEO_ENHANCED, {})
 
         if all(not r for r in results):
             raise UpdateFailed("Failed to fetch any data from IMGW API")
@@ -771,20 +763,71 @@ class ImgwRadarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch radar map from IMGW API Proxy."""
-        url = f"{FORECAST_API_URL}/radar?lat={self.lat}&lon={self.lon}&product={self.product}"
+        url = f"{FORECAST_API_URL}/radar?lat={self.lat}&lon={self.lon}&product={self.product}&t={int(time.time())}"
         session = async_get_clientsession(self.hass)
         try:
             async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=30)
+                url, timeout=aiohttp.ClientTimeout(total=30),
+                headers={"Cache-Control": "no-cache"},
             ) as resp:
-                if resp.status != 200:
-                    raise UpdateFailed(
-                        f"IMGW radar API returned {resp.status}"
-                    )
-                self.image_bytes = await resp.read()
-                self.image_timestamp = resp.headers.get("X-Radar-Timestamp")
+                if resp.status == 200:
+                    self.image_bytes = await resp.read()
+                    new_ts = resp.headers.get("X-Radar-Timestamp")
+                    cache_status = resp.headers.get("X-Cache", "")
+                    if cache_status == "STALE":
+                        _LOGGER.debug("Radar %s got stale image (ts=%s)", self.product, new_ts)
+                    if new_ts and new_ts != self.image_timestamp:
+                        _LOGGER.debug("Radar %s updated: %s → %s", self.product, self.image_timestamp, new_ts)
+                    self.image_timestamp = new_ts
+                    return {"timestamp": self.image_timestamp}
+                # Non-200 but not a fatal error — keep old image, don't trigger backoff
+                _LOGGER.debug("Radar %s returned %s, keeping previous image", self.product, resp.status)
                 return {"timestamp": self.image_timestamp}
-        except aiohttp.ClientError as err:
-            raise UpdateFailed(
-                f"Error fetching IMGW radar map: {err}"
-            ) from err
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            # Network error — keep old image, don't trigger exponential backoff
+            _LOGGER.debug("Radar %s fetch failed: %s, keeping previous image", self.product, err)
+            if self.image_bytes:
+                return {"timestamp": self.image_timestamp}
+            raise UpdateFailed(f"Radar {self.product} unavailable: {err}") from err
+
+
+class ImgwRadarAnimCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Fetch animated GIF from IMGW API Proxy for OZE products."""
+
+    def __init__(self, hass: HomeAssistant, lat: float, lon: float, product: str, hours: int = 24) -> None:
+        """Initialize the animated radar coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_radar_anim_{product}",
+            update_interval=timedelta(seconds=RADAR_OZE_UPDATE_INTERVAL),
+        )
+        self.lat = lat
+        self.lon = lon
+        self.product = product
+        self.hours = hours
+        self.image_bytes: bytes | None = None
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch animated GIF from IMGW API Proxy."""
+        url = (
+            f"{FORECAST_API_URL}/radar?lat={self.lat}&lon={self.lon}"
+            f"&product={self.product}&animate={self.hours}&t={int(time.time())}"
+        )
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(
+                url,
+                timeout=aiohttp.ClientTimeout(total=60),
+                headers={"Cache-Control": "no-cache"},
+            ) as resp:
+                if resp.status == 200:
+                    self.image_bytes = await resp.read()
+                    return {"hours": self.hours}
+                _LOGGER.debug("Animated radar %s returned %s, keeping previous", self.product, resp.status)
+                return {"hours": self.hours}
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("Animated radar %s fetch failed: %s", self.product, err)
+            if self.image_bytes:
+                return {"hours": self.hours}
+            raise UpdateFailed(f"Animated radar {self.product} unavailable: {err}") from err
