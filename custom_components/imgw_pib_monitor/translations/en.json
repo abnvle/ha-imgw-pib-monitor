@@ -139,12 +139,13 @@
       "hydro_water_level_trend": {
         "name": "Water level trend{station_suffix}",
         "state": {
-          "strongly_falling": "Strongly falling",
+          "strongly_falling": "Falling",
           "falling": "Falling",
-          "slightly_falling": "Slightly falling",
+          "slightly_falling": "Falling",
           "stable": "Stable",
+          "slightly_rising": "Rising",
           "rising": "Rising",
-          "strongly_rising": "Strongly rising"
+          "strongly_rising": "Rising"
         }
       },
       "hydro_warning_remaining": { "name": "Warning level remaining{station_suffix}" },

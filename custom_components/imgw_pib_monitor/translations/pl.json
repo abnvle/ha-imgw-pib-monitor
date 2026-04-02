@@ -139,12 +139,13 @@
       "hydro_water_level_trend": {
         "name": "Trend poziomu wody{station_suffix}",
         "state": {
-          "strongly_falling": "Silnie malejący",
+          "strongly_falling": "Malejący",
           "falling": "Malejący",
-          "slightly_falling": "Lekko malejący",
-          "stable": "Stabilny",
-          "rising": "Wzrostowy",
-          "strongly_rising": "Silnie wzrostowy"
+          "slightly_falling": "Malejący",
+          "stable": "Bez zmian",
+          "slightly_rising": "Rosnący",
+          "rising": "Rosnący",
+          "strongly_rising": "Rosnący"
         }
       },
       "hydro_warning_remaining": { "name": "Do stanu ostrzegawczego{station_suffix}" },
