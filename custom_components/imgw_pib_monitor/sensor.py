@@ -205,7 +205,7 @@ HYDRO_SENSORS: tuple[ImgwSensorEntityDescription, ...] = (
         key="water_level_trend",
         translation_key="hydro_water_level_trend",
         device_class=SensorDeviceClass.ENUM,
-        options=["strongly_falling", "falling", "slightly_falling", "stable", "rising", "strongly_rising"],
+        options=["strongly_falling", "falling", "slightly_falling", "stable", "slightly_rising", "rising", "strongly_rising"],
         icon="mdi:trending-up",
         value_fn=lambda data: data.get("water_level_trend"),
     ),

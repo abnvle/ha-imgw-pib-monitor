@@ -143,6 +143,7 @@
           "falling": "Falling",
           "slightly_falling": "Slightly falling",
           "stable": "Stable",
+          "slightly_rising": "Slightly rising",
           "rising": "Rising",
           "strongly_rising": "Strongly rising"
         }

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "imgw_pib_monitor"
-VERSION: Final = "2.2.2"
+VERSION: Final = "2.2.3"
 USER_AGENT: Final = f"HomeAssistant-IMGW-PIB-Monitor/{VERSION}"
 MANUFACTURER: Final = "Łukasz Kozik (lkozik@evilit.pl)"
 ATTRIBUTION: Final = (
@@ -33,7 +33,7 @@ HYDRO_TREND_MAP: Final[dict[int, str]] = {
     -20: "falling",
     -10: "slightly_falling",
     0: "stable",
-    10: "stable",
+    10: "slightly_rising",
     20: "rising",
     30: "strongly_rising",
 }
