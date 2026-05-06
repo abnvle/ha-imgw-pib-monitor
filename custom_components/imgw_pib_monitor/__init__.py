@@ -9,16 +9,22 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.loader import async_get_loaded_integration
 
 from .api import ImgwApiClient
 from .const import (
+    ALL_KNOWN_PRODUCTS,
+    ANIM_PRODUCT_SET,
+    ANIM_PRODUCTS,
     CONF_ENABLE_ENHANCED_WARNINGS_METEO,
     CONF_ENABLE_RADAR_CAMERA,
     CONF_ENABLE_WEATHER_FORECAST,
     CONF_RADAR_PRODUCTS,
+    OZE_PRODUCTS,
     RADAR_OZE_UPDATE_INTERVAL,
     RADAR_SAT_UPDATE_INTERVAL,
     RADAR_UPDATE_INTERVAL,
+    SAT_PRODUCTS,
     CONF_FORECAST_LAT,
     CONF_FORECAST_LON,
     CONF_LOCATION_NAME,
@@ -86,7 +92,6 @@ def _async_cleanup_enhanced_warnings(hass: HomeAssistant, entry: ConfigEntry) ->
 
 def _async_cleanup_radar(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove radar camera entities and device from registries when radar is disabled."""
-    from .camera import ALL_KNOWN_PRODUCTS
     ent_reg = er.async_get(hass)
     for product in ALL_KNOWN_PRODUCTS:
         entity_id = ent_reg.async_get_entity_id(
@@ -173,8 +178,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Radar camera support (camera platform)
     radar_products = entry.data.get(CONF_RADAR_PRODUCTS, [])
     if entry.data.get(CONF_ENABLE_RADAR_CAMERA) and radar_products:
-        from .camera import ANIM_PRODUCTS, SAT_PRODUCTS, OZE_PRODUCTS, ANIM_PRODUCT_SET, ALL_KNOWN_PRODUCTS
-
         lat = entry.data.get(CONF_FORECAST_LAT, hass.config.latitude)
         lon = entry.data.get(CONF_FORECAST_LON, hass.config.longitude)
 
@@ -213,6 +216,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     else:
         _async_cleanup_radar(hass, entry)
 
+    # Pre-load platform modules off the event loop to avoid a blocking
+    # import_module call inside async_forward_entry_setups (HA 2025.x warning).
+    integration = async_get_loaded_integration(hass, DOMAIN)
+    await integration.async_get_platforms(platforms)
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -360,7 +367,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(f"{entry.entry_id}_forecast", None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_binary_sensor", None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_radar", None)
-        from .camera import ALL_KNOWN_PRODUCTS
         for p in ALL_KNOWN_PRODUCTS:
             hass.data[DOMAIN].pop(f"{entry.entry_id}_radar_{p}", None)
 

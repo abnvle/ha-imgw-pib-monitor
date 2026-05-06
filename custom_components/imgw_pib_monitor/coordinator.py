@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 import logging
 import time
 from typing import Any
@@ -53,6 +55,19 @@ _LOGGER = logging.getLogger(__name__)
 class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Global coordinator to fetch all IMGW-PIB data with rate limiting."""
 
+    # Per-endpoint freshness TTLs (seconds). An endpoint that was fetched within
+    # its TTL is served from cache instead of issuing a new request — this
+    # decouples user-configured polling cadence from IMGW's actual update
+    # frequency and is the main source of request reduction.
+    ENDPOINT_TTLS: dict[str, int] = {
+        DATA_TYPE_SYNOP: 1800,                     # IMGW updates ~hourly
+        DATA_TYPE_HYDRO: 900,                      # hydro-back updates ~15 min
+        DATA_TYPE_METEO: 600,                      # meteo updates every 10 min
+        DATA_TYPE_WARNINGS_METEO: 1800,            # warnings change rarely
+        DATA_TYPE_WARNINGS_HYDRO: 1800,
+        DATA_TYPE_WARNINGS_METEO_ENHANCED: 3600,   # heaviest payload, slowest cadence
+    }
+
     def __init__(self, hass: HomeAssistant, api: ImgwApiClient, update_interval_minutes: int | None = None) -> None:
         """Initialize the global coordinator."""
         interval = timedelta(minutes=update_interval_minutes) if update_interval_minutes else timedelta(minutes=15)
@@ -68,6 +83,8 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_fetch_time: float = 0
         self.synop_coords: dict[str, tuple[float, float]] = {}
         self._synop_coords_loaded = False
+        self._endpoint_cache: dict[str, Any] = {}
+        self._endpoint_last_fetch: dict[str, float] = {}
 
     async def get_synop_station_coords(self) -> dict[str, tuple[float, float]]:
         """Return synop station coordinates — fetched from API, fallback to hardcoded."""
@@ -89,13 +106,10 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Load synop station coordinates once
         await self.get_synop_station_coords()
 
-        async def _fetch_with_limit(coro, endpoint_name: str, default=None):
-            if default is None:
-                default = []
+        async def _fetch_with_limit(coro, endpoint_name: str, default):
             async with self._semaphore:
                 try:
                     res = await coro
-                    await asyncio.sleep(0.2)
                     _LOGGER.debug(
                         "IMGW endpoint %s returned %d items",
                         endpoint_name,
@@ -112,28 +126,47 @@ class ImgwGlobalDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for e in self.hass.config_entries.async_entries(DOMAIN)
         )
 
-        fetches = {
-            DATA_TYPE_SYNOP: _fetch_with_limit(self.api.get_all_synop_data(), "synop"),
-            DATA_TYPE_HYDRO: _fetch_with_limit(self.api.get_all_hydro_data(), "hydro"),
-            DATA_TYPE_METEO: _fetch_with_limit(self.api.get_all_meteo_data(), "meteo"),
-            DATA_TYPE_WARNINGS_METEO: _fetch_with_limit(self.api.get_warnings_meteo(), "warnings_meteo"),
-            DATA_TYPE_WARNINGS_HYDRO: _fetch_with_limit(self.api.get_warnings_hydro(), "warnings_hydro"),
-        }
+        endpoint_specs: list[tuple[str, Any, Any, str]] = [
+            (DATA_TYPE_SYNOP, self.api.get_all_synop_data, [], "synop"),
+            (DATA_TYPE_HYDRO, self.api.get_all_hydro_data, [], "hydro"),
+            (DATA_TYPE_METEO, self.api.get_all_meteo_data, [], "meteo"),
+            (DATA_TYPE_WARNINGS_METEO, self.api.get_warnings_meteo, [], "warnings_meteo"),
+            (DATA_TYPE_WARNINGS_HYDRO, self.api.get_warnings_hydro, [], "warnings_hydro"),
+        ]
         if fetch_enhanced:
-            fetches[DATA_TYPE_WARNINGS_METEO_ENHANCED] = _fetch_with_limit(
-                self.api.get_enhanced_warnings_meteo(), "enhanced_warnings_meteo", default={},
+            endpoint_specs.append(
+                (DATA_TYPE_WARNINGS_METEO_ENHANCED, self.api.get_enhanced_warnings_meteo, {}, "enhanced_warnings_meteo")
             )
 
-        keys = list(fetches.keys())
-        results = await asyncio.gather(*fetches.values())
+        # Fetch only endpoints whose per-endpoint TTL has expired; reuse cache otherwise.
+        now = time.monotonic()
+        keys_to_fetch: list[str] = []
+        coros_to_run: list[Any] = []
+        for key, factory, default, name in endpoint_specs:
+            ttl = self.ENDPOINT_TTLS.get(key, 0)
+            cached_age = now - self._endpoint_last_fetch.get(key, 0.0)
+            if key in self._endpoint_cache and cached_age < ttl:
+                _LOGGER.debug(
+                    "Skipping %s fetch — cached %.0fs ago (ttl %ds)",
+                    name, cached_age, ttl,
+                )
+                continue
+            keys_to_fetch.append(key)
+            coros_to_run.append(_fetch_with_limit(factory(), name, default))
 
-        data: dict[str, Any] = {k: v for k, v in zip(keys, results)}
+        if coros_to_run:
+            results = await asyncio.gather(*coros_to_run)
+            for key, value in zip(keys_to_fetch, results):
+                self._endpoint_cache[key] = value
+                self._endpoint_last_fetch[key] = now
+
+        data: dict[str, Any] = dict(self._endpoint_cache)
         data.setdefault(DATA_TYPE_WARNINGS_METEO_ENHANCED, {})
 
-        if all(not r for r in results):
+        if not data or all(not v for v in data.values()):
             raise UpdateFailed("Failed to fetch any data from IMGW API")
 
-        self._last_fetch_time = time.monotonic()
+        self._last_fetch_time = now
         return data
 
     async def async_fetch_data(self) -> dict[str, Any]:
@@ -709,17 +742,22 @@ class ImgwForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, lat: float, lon: float, update_interval_minutes: int | None = None) -> None:
         """Initialize the forecast coordinator."""
         if update_interval_minutes is not None:
-            interval = timedelta(minutes=update_interval_minutes)
+            base_seconds = update_interval_minutes * 60
         else:
-            interval = timedelta(seconds=FORECAST_UPDATE_INTERVAL)
+            base_seconds = FORECAST_UPDATE_INTERVAL
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_forecast",
-            update_interval=interval,
+            update_interval=timedelta(seconds=base_seconds),
         )
         self.lat = lat
         self.lon = lon
+        self._base_interval = base_seconds
+        # IMGW forecast data refreshes ~hourly; cap backoff at 1h or 6× base.
+        self._max_interval = max(min(base_seconds * 6, 3600), base_seconds)
+        self._unchanged_count = 0
+        self._payload_hash: str | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch forecast data from IMGW API Proxy."""
@@ -733,7 +771,16 @@ class ImgwForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     raise UpdateFailed(
                         f"IMGW forecast API returned {resp.status}"
                     )
-                data = await resp.json()
+                raw = await resp.read()
+                new_hash = hashlib.md5(raw).hexdigest()
+                if self._payload_hash is not None and new_hash == self._payload_hash:
+                    self._unchanged_count += 1
+                else:
+                    self._unchanged_count = 0
+                self._payload_hash = new_hash
+                self._adapt_interval()
+
+                data = json.loads(raw)
                 if "data" in data and isinstance(data["data"], dict):
                     return data["data"]
                 return data
@@ -741,6 +788,19 @@ class ImgwForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(
                 f"Error communicating with IMGW forecast API: {err}"
             ) from err
+
+    def _adapt_interval(self) -> None:
+        """Extend polling interval after consecutive unchanged payloads."""
+        if self._unchanged_count >= 2:
+            new_interval = self._max_interval
+        else:
+            new_interval = self._base_interval
+        if self.update_interval != timedelta(seconds=new_interval):
+            _LOGGER.debug(
+                "Forecast interval adapted: %ds (unchanged_count=%d)",
+                new_interval, self._unchanged_count,
+            )
+            self.update_interval = timedelta(seconds=new_interval)
 
 
 class ImgwRadarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -760,6 +820,11 @@ class ImgwRadarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.product = product
         self.image_bytes: bytes | None = None
         self.image_timestamp: str | None = None
+        self._base_interval = interval
+        # IMGW publishes a new radar frame ~every 10 min. Don't extend past
+        # 2× base or 600s — beyond that we'd routinely miss updates.
+        self._max_interval = max(min(interval * 2, 600), interval)
+        self._unchanged_count = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch radar map from IMGW API Proxy."""
@@ -771,14 +836,20 @@ class ImgwRadarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 headers={"Cache-Control": "no-cache"},
             ) as resp:
                 if resp.status == 200:
+                    prev_ts = self.image_timestamp
                     self.image_bytes = await resp.read()
                     new_ts = resp.headers.get("X-Radar-Timestamp")
                     cache_status = resp.headers.get("X-Cache", "")
                     if cache_status == "STALE":
                         _LOGGER.debug("Radar %s got stale image (ts=%s)", self.product, new_ts)
-                    if new_ts and new_ts != self.image_timestamp:
-                        _LOGGER.debug("Radar %s updated: %s → %s", self.product, self.image_timestamp, new_ts)
+                    if new_ts and new_ts != prev_ts:
+                        _LOGGER.debug("Radar %s updated: %s → %s", self.product, prev_ts, new_ts)
                     self.image_timestamp = new_ts
+                    if new_ts and prev_ts and new_ts == prev_ts:
+                        self._unchanged_count += 1
+                    else:
+                        self._unchanged_count = 0
+                    self._adapt_interval()
                     return {"timestamp": self.image_timestamp}
                 # Non-200 but not a fatal error — keep old image, don't trigger backoff
                 _LOGGER.debug("Radar %s returned %s, keeping previous image", self.product, resp.status)
@@ -789,6 +860,16 @@ class ImgwRadarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self.image_bytes:
                 return {"timestamp": self.image_timestamp}
             raise UpdateFailed(f"Radar {self.product} unavailable: {err}") from err
+
+    def _adapt_interval(self) -> None:
+        """Extend polling interval after consecutive unchanged frames."""
+        new_interval = self._max_interval if self._unchanged_count >= 2 else self._base_interval
+        if self.update_interval != timedelta(seconds=new_interval):
+            _LOGGER.debug(
+                "Radar %s interval adapted: %ds (unchanged_count=%d)",
+                self.product, new_interval, self._unchanged_count,
+            )
+            self.update_interval = timedelta(seconds=new_interval)
 
 
 class ImgwRadarAnimCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -807,6 +888,10 @@ class ImgwRadarAnimCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.product = product
         self.hours = hours
         self.image_bytes: bytes | None = None
+        self._base_interval = RADAR_OZE_UPDATE_INTERVAL
+        self._max_interval = max(min(RADAR_OZE_UPDATE_INTERVAL * 2, 600), RADAR_OZE_UPDATE_INTERVAL)
+        self._unchanged_count = 0
+        self._image_hash: str | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch animated GIF from IMGW API Proxy."""
@@ -822,7 +907,15 @@ class ImgwRadarAnimCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 headers={"Cache-Control": "no-cache"},
             ) as resp:
                 if resp.status == 200:
-                    self.image_bytes = await resp.read()
+                    new_bytes = await resp.read()
+                    new_hash = hashlib.md5(new_bytes).hexdigest()
+                    if self._image_hash is not None and new_hash == self._image_hash:
+                        self._unchanged_count += 1
+                    else:
+                        self._unchanged_count = 0
+                    self._image_hash = new_hash
+                    self.image_bytes = new_bytes
+                    self._adapt_interval()
                     return {"hours": self.hours}
                 _LOGGER.debug("Animated radar %s returned %s, keeping previous", self.product, resp.status)
                 return {"hours": self.hours}
@@ -831,3 +924,13 @@ class ImgwRadarAnimCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self.image_bytes:
                 return {"hours": self.hours}
             raise UpdateFailed(f"Animated radar {self.product} unavailable: {err}") from err
+
+    def _adapt_interval(self) -> None:
+        """Extend polling interval after consecutive identical frames."""
+        new_interval = self._max_interval if self._unchanged_count >= 2 else self._base_interval
+        if self.update_interval != timedelta(seconds=new_interval):
+            _LOGGER.debug(
+                "Animated radar %s interval adapted: %ds (unchanged_count=%d)",
+                self.product, new_interval, self._unchanged_count,
+            )
+            self.update_interval = timedelta(seconds=new_interval)

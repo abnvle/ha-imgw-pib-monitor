@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "imgw_pib_monitor"
-VERSION: Final = "2.2.3"
+VERSION: Final = "2.2.4"
 USER_AGENT: Final = f"HomeAssistant-IMGW-PIB-Monitor/{VERSION}"
 MANUFACTURER: Final = "Łukasz Kozik (lkozik@evilit.pl)"
 ATTRIBUTION: Final = (
@@ -199,6 +199,32 @@ CONF_RADAR_TYPE: Final = "radar_type"
 RADAR_UPDATE_INTERVAL: Final = 300  # 5 minutes, in seconds
 RADAR_SAT_UPDATE_INTERVAL: Final = 300  # 5 minutes for satellite (same as radar)
 RADAR_OZE_UPDATE_INTERVAL: Final = 300  # 5 minutes — same as radar/satellite
+
+# Radar product catalog — kept here (not in camera.py) so __init__.py can import
+# without pulling in the camera platform module on the event loop.
+PRODUCT_LABELS: Final[dict[str, str]] = {
+    "cmax": "Odbiciowość (CMAX)",
+    "sri": "Opady (SRI)",
+    "pac": "Suma opadów 1h (PAC)",
+    "natural_color": "Zdjęcie satelitarne",
+    "infrared": "Zachmurzenie (IR)",
+    "water_vapor": "Para wodna",
+    "cloud_type": "Typy chmur",
+    "oze_pv": "Prognoza generacji PV",
+    "oze_wind": "Prognoza generacji wiatr",
+    "oze_pv_anim": "Animacja generacji PV (24h)",
+    "oze_wind_anim": "Animacja generacji wiatr (24h)",
+}
+
+ANIM_PRODUCTS: Final[dict[str, str]] = {
+    "oze_pv_anim": "oze_pv",
+    "oze_wind_anim": "oze_wind",
+}
+
+SAT_PRODUCTS: Final[set[str]] = {"natural_color", "infrared", "water_vapor", "cloud_type"}
+OZE_PRODUCTS: Final[set[str]] = {"oze_pv", "oze_wind"}
+ANIM_PRODUCT_SET: Final[set[str]] = set(ANIM_PRODUCTS.keys())
+ALL_KNOWN_PRODUCTS: Final[set[str]] = set(PRODUCT_LABELS.keys())
 
 # Forecast (weather entity) config
 CONF_ENABLE_WEATHER_FORECAST: Final = "enable_weather_forecast"

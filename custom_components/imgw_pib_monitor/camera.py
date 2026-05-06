@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    ANIM_PRODUCTS,
     ATTRIBUTION,
     CONF_FORECAST_LAT,
     CONF_FORECAST_LON,
@@ -19,33 +20,9 @@ from .const import (
     CONF_RADAR_PRODUCTS,
     DOMAIN,
     MANUFACTURER,
+    PRODUCT_LABELS,
 )
 from .coordinator import ImgwRadarAnimCoordinator, ImgwRadarCoordinator
-
-PRODUCT_LABELS = {
-    "cmax": "Odbiciowość (CMAX)",
-    "sri": "Opady (SRI)",
-    "pac": "Suma opadów 1h (PAC)",
-    "natural_color": "Zdjęcie satelitarne",
-    "infrared": "Zachmurzenie (IR)",
-    "water_vapor": "Para wodna",
-    "cloud_type": "Typy chmur",
-    "oze_pv": "Prognoza generacji PV",
-    "oze_wind": "Prognoza generacji wiatr",
-    "oze_pv_anim": "Animacja generacji PV (24h)",
-    "oze_wind_anim": "Animacja generacji wiatr (24h)",
-}
-
-ANIM_PRODUCTS = {
-    "oze_pv_anim": "oze_pv",
-    "oze_wind_anim": "oze_wind",
-}
-
-SAT_PRODUCTS = {"natural_color", "infrared", "water_vapor", "cloud_type"}
-OZE_PRODUCTS = {"oze_pv", "oze_wind"}
-ANIM_PRODUCT_SET = set(ANIM_PRODUCTS.keys())
-
-ALL_KNOWN_PRODUCTS = set(PRODUCT_LABELS.keys())
 
 
 async def async_setup_entry(
